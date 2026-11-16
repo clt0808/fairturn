@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { GetLinkForm } from "@/app/get/get-link-form";
+import { SchemeTerms } from "@/components/scheme-terms";
 import { CLAIM_COOKIE } from "@/lib/admin/session";
 import { formatClaimCode, normalizeClaimCode } from "@/lib/claims/code";
 import { getDb } from "@/lib/db";
@@ -61,6 +62,9 @@ export default async function GetProviderPage({ params }: { params: Promise<{ pr
           queueEmpty={active === 0}
           initialTicket={initialTicket}
         />
+      </div>
+      <div className="mt-4">
+        <SchemeTerms scheme={scheme} />
       </div>
     </main>
   );

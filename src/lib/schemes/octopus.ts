@@ -38,6 +38,8 @@ export const octopusScheme: ReferralScheme = {
   supplierName: "Octopus Energy",
   schemeName: "Refer a friend",
   entry: "url",
+  bannerName: "Octopus",
+  rewardText: "£50 each",
   referrerReward: "£50",
   newCustomerReward: "£50",
   offerStart: "",

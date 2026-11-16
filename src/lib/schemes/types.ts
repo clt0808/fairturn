@@ -15,6 +15,12 @@ export type ReferralScheme = {
   schemeName: string;
   /** url: paste a referral link. code: paste a referral code. */
   entry: "url" | "code";
+  /** Short name used in the top bonus line, such as "EDF" or "Octopus". */
+  bannerName: string;
+  /** Compact bonus text, such as "£100 + £75" or "£50 each". */
+  rewardText: string;
+  /** Inclusive last day of a published offer, YYYY-MM-DD in Europe/London. Omitted when the provider publishes no end date. */
+  endsOn?: string;
   referrerReward: string;
   newCustomerReward: string;
   /** Inclusive calendar dates, YYYY-MM-DD, in Europe/London. Empty when the provider does not publish a window. */

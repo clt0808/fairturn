@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Newsreader, Source_Sans_3 } from "next/font/google";
+import { headers } from "next/headers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { TermsNotice } from "@/components/terms-notice";
+import { BonusBanner } from "@/components/terms-notice";
+import { bonusLinesForPath } from "@/lib/schemes/bonus";
 import { getDb } from "@/lib/db";
 import { listLinks } from "@/lib/db/repository";
 import { isDemoEmail } from "@/lib/format";
@@ -51,7 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
         <SiteHeader />
-        <TermsNotice />
+        <BonusBanner lines={bonusLinesForPath((await headers()).get("x-fairturn-path") || "/")} />
         {demo ? (
           <p className="border-b border-line bg-moss px-4 py-2 text-center text-sm text-pine-deep">
             Sample queue. Addresses at example.com are not real customers.

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { AddLinkForm } from "@/app/add/add-link-form";
+import { SchemeTerms } from "@/components/scheme-terms";
 import { CLAIM_COOKIE } from "@/lib/admin/session";
 import { formatClaimCode, normalizeClaimCode } from "@/lib/claims/code";
 import { getDb } from "@/lib/db";
@@ -46,6 +47,9 @@ export default async function AddProviderPage({ params }: { params: Promise<{ pr
           getHref={`/p/${scheme.id}/get`}
           initialClaimCode={usable ? formatClaimCode(normalized) : ""}
         />
+      </div>
+      <div className="mt-4">
+        <SchemeTerms scheme={scheme} />
       </div>
     </main>
   );

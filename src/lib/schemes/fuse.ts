@@ -31,6 +31,8 @@ export const fuseScheme: ReferralScheme = {
   supplierName: "Fuse Energy",
   schemeName: "Referral code",
   entry: "code",
+  bannerName: "Fuse",
+  rewardText: "£100 each",
   referrerReward: "£100",
   newCustomerReward: "£100",
   offerStart: "",

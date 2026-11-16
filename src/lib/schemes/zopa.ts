@@ -37,6 +37,8 @@ export const zopaScheme: ReferralScheme = {
   supplierName: "Zopa",
   schemeName: "Refer a Friend",
   entry: "url",
+  bannerName: "Zopa",
+  rewardText: "reward shown in app",
   referrerReward: "shown in the app",
   newCustomerReward: "shown in the app",
   offerStart: "",
