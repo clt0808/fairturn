@@ -1,0 +1,2 @@
+import{i as e}from"./cache-handler-CCvRjyeR.js";import{T as t,p as n}from"./headers-NzU6bIaE.js";function r(n,r){if(!r)return;let i={};typeof r.revalidate==`number`&&Number.isFinite(r.revalidate)&&(i.revalidate=r.revalidate),typeof r.expire==`number`&&Number.isFinite(r.expire)&&(i.expire=r.expire);let a=e(r);a!==void 0&&(i.stale=a),(i.revalidate!==void 0||i.expire!==void 0||i.stale!==void 0)&&n.set(t,JSON.stringify(i))}function i(e,t){t.length>0&&e.set(n,t.join(`,`))}export{i as n,r as t};
+//# sourceMappingURL=prerender-cache-life-header-BBjVFIE5.js.map

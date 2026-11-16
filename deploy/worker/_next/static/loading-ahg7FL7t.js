@@ -1,0 +1,2 @@
+import{t as e}from"./framework~index~page~layout~loading~not-found~page~page~page~page~page~page-CjVPQWlC.js";var t=e();function n(){return(0,t.jsx)(`p`,{className:`mx-auto max-w-3xl px-4 py-16 text-ink/70`,children:`Loading the queue…`})}export{n as default};
+//# sourceMappingURL=loading-ahg7FL7t.js.map

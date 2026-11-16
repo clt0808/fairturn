@@ -1,2 +1,0 @@
-import"./rolldown-runtime-XKyaHtl9.js";import{t as e}from"./framework~index~page~error~page~page~layout~loading~not-found~page~page~page~actions~app-se~n8dqv8av-CcOTYhCj.js";import{n as t}from"./button-QKhDNSAk.js";import{t as n}from"./framework~index~page~page~page~layout~loading~not-found~page~page~page-C6lmRdMB.js";e();var r=n();function i({className:e,...n}){return(0,r.jsx)(`div`,{className:t(`rounded-lg border border-line bg-card text-ink shadow-sm`,e),...n})}export{i as t};
-//# sourceMappingURL=card-DqXmsVwk.js.map

@@ -1,0 +1,2 @@
+import{t as e}from"./request-context-BOsk2-tl.js";function t(e){return typeof e==`object`&&!!e&&!Array.isArray(e)}function n(){}function r(e){let t=Promise;if(typeof t.withResolvers!=`function`)return e;let n=t.withResolvers();return e.then(n.resolve,n.reject),n.promise}function i(t,i){return(typeof i?.waitUntil==`function`?i:e())?.waitUntil?.(t.then(n,n)),r(t)}var a=Symbol.for(`vinext.shareIsolatePromise`);globalThis[a]??=i;export{t as n,i as t};
+//# sourceMappingURL=isolate-shared-promise-ETr9WF6Q.js.map
