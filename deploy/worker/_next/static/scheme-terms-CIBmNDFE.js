@@ -1,0 +1,2 @@
+import{t as e}from"./framework~index~page~layout~loading~not-found~page~page~page~page~page~page-CjVPQWlC.js";var t=e();function n({scheme:e}){return(0,t.jsxs)(`p`,{className:`text-xs leading-5 text-ink/60`,children:[e.termsLine,` `,(0,t.jsxs)(`a`,{className:`underline underline-offset-2`,href:e.termsUrl,children:[e.bannerName,` terms`]})]})}export{n as t};
+//# sourceMappingURL=scheme-terms-CIBmNDFE.js.map

@@ -1,0 +1,2 @@
+import{r as e}from"./server-OWePeeSj.js";import{t}from"./db-B02GftPD.js";var n=`force-dynamic`;async function r(){try{let n=await(await t()).prepare(`SELECT 1 AS ok`).first();return!n||Number(n.ok)!==1?e.json({ok:!1},{status:503}):e.json({ok:!0})}catch(t){return console.error(`health check failed`,t instanceof Error?t.message:`unknown`),e.json({ok:!1},{status:503})}}export{r as GET,n as dynamic};
+//# sourceMappingURL=route-D_OxTVtY.js.map

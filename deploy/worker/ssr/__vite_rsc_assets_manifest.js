@@ -186,7 +186,7 @@ export default {
     "src/app/layout.tsx": {
       "js": [],
       "css": [
-        "/_next/static/css/BfaS7xyc.css"
+        "/_next/static/css/0VGQ1h0W.css"
       ]
     }
   }
