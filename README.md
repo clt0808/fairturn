@@ -91,18 +91,26 @@ For a local demo, set `SEED_DEMO=true` in `.env.local` before the first start. T
 | `DATABASE_PATH` | SQLite file. Defaults to `./data/fairturn.db`. |
 | `SEED_DEMO` | `true` loads sample links into an empty database. Leave unset in public. |
 
-## Deploy it publicly
+## Deploy it on Render
 
-This needs a normal Node process and a disk that survives restarts. SQLite has one writer, so run **one** app instance.
+`render.yaml` is a Render Blueprint for one web service. SQLite has one writer, so the service stays at a single instance. The persistent disk is the whole queue. Back it up. A serverless host with an ephemeral filesystem will wipe it.
 
-A small VM, Fly.io with a volume, or Railway with a volume are a fit. A serverless host with an ephemeral filesystem (Vercel, for example) is not: the queue would be wiped, or the file would not be writable.
+Render builds with `npm ci --include=dev && npm run build` and starts with `npm start`. `npm start` listens on `PORT` (Render sets this) and falls back to 43123. The health check is `GET /health`. Node is 22 (`engines` and `.node-version`).
 
-1. Install dependencies and run `npm test`, then `npm run build`.
-2. Set `ADMIN_PASSWORD`, `AUTH_SECRET`, and `IP_HASH_SALT` to long random values. Do not set `SEED_DEMO`.
-3. Point `DATABASE_PATH` at the persistent disk.
-4. Start with `npm start`. The server listens on port **43123**. Put HTTPS in front of it (Caddy, nginx, or the platform’s proxy) and proxy to that port, or change the port in the `start` script.
-5. Back up the SQLite file. It is the whole queue, including emails and claim codes.
-6. Seed your own referral link from `/admin` after you log in. That form checks the URL and the duplicate rules, and it can mark the link boosted if you want.
+| Variable | On Render |
+| --- | --- |
+| `ADMIN_PASSWORD` | You type this in the dashboard when the Blueprint is created. It is not in git. |
+| `AUTH_SECRET` | Render generates it. |
+| `IP_HASH_SALT` | Render generates it. |
+| `DATABASE_PATH` | `/var/data/fairturn.db` on the disk mounted at `/var/data`. |
+| `SEED_DEMO` | `false`. Leave it that way. |
+| `NODE_VERSION` | `22`. |
+
+After the first deploy, open `/admin`, enter `ADMIN_PASSWORD`, and add your own EDF link. Mark it as the owner link there if you want the every-third-turn share.
+
+`node:sqlite` is still marked experimental in Node 22. It is built in, so there is no native module to compile. Stay on Node 22 until a newer Node has been re-tested.
+
+Emails of people who add a link are visible to anyone with the admin password. Treat that password like a database credential.
 
 `node:sqlite` is still marked experimental in Node 22. It is built in, so there is no native module to compile. Plan to stay on Node 22 until you have re-tested a move to a newer Node.
 
