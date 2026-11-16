@@ -10,7 +10,14 @@ import {
 } from "@/lib/abuse/limits";
 import { generateClaimCode } from "@/lib/claims/code";
 import { evaluateClaim, type ClaimRejectReason } from "@/lib/claims/evaluate";
-import { BOOSTED_WEIGHT, moveInQueue, pickNext, STANDARD_WEIGHT, type QueueMember } from "@/lib/queue";
+import {
+  BOOSTED_WEIGHT,
+  handOutNext,
+  moveInQueue,
+  parseOwnerEvery,
+  STANDARD_WEIGHT,
+  type QueueMember,
+} from "@/lib/queue";
 import { edfScheme } from "@/lib/schemes/edf";
 
 export type LinkRow = {
@@ -24,6 +31,7 @@ export type LinkRow = {
   handouts: number;
   boosted: boolean;
   active: boolean;
+  owner: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -39,6 +47,7 @@ type LinkSql = {
   handouts: number;
   boosted: number;
   active: number;
+  is_owner: number;
   created_at: number;
   updated_at: number;
 };
@@ -108,6 +117,7 @@ function mapLink(row: LinkSql): LinkRow {
     handouts: row.handouts,
     boosted: row.boosted === 1,
     active: row.active === 1,
+    owner: row.is_owner === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -121,6 +131,7 @@ function toMember(link: LinkRow): QueueMember {
     handouts: link.handouts,
     createdAt: link.createdAt,
     active: link.active,
+    owner: link.owner,
   };
 }
 
@@ -142,6 +153,7 @@ export function createAppDatabase(filename = ":memory:"): DatabaseSync {
       handouts INTEGER NOT NULL DEFAULT 0,
       boosted INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
+      is_owner INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -183,8 +195,32 @@ export function createAppDatabase(filename = ":memory:"): DatabaseSync {
 
     CREATE INDEX IF NOT EXISTS rate_events_lookup
       ON rate_events(action, ip_hash, created_at);
+
+    CREATE TABLE IF NOT EXISTS queue_settings (
+      scheme_id TEXT PRIMARY KEY,
+      owner_every INTEGER NOT NULL
+    );
   `);
+  ensureQueueShape(db);
   return db;
+}
+
+/** Safe to run on every request. Adds the owner-link columns to a database created before them. */
+export function ensureQueueShape(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS queue_settings (
+      scheme_id TEXT PRIMARY KEY,
+      owner_every INTEGER NOT NULL
+    );
+  `);
+  const columns = db.prepare("PRAGMA table_info(links)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "is_owner")) {
+    db.exec("ALTER TABLE links ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0");
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS links_one_owner
+      ON links(scheme_id) WHERE is_owner = 1;
+  `);
 }
 
 function pruneRates(db: DatabaseSync, now: number) {
@@ -379,7 +415,11 @@ export function handOutLink(
     }
 
     const links = listLinks(db, input.schemeId).filter((link) => link.active);
-    const picked = pickNext(links.map(toMember));
+    const settings = getQueueSettings(db, input.schemeId);
+    const picked = handOutNext(links.map(toMember), {
+      handoutsSoFar: countHandouts(db, input.schemeId),
+      ownerEvery: settings.ownerEvery,
+    });
     if (!picked) return { ok: false, reason: "empty" };
 
     const update = db.prepare(
@@ -439,6 +479,58 @@ export function setLinkActive(db: DatabaseSync, id: string, active: boolean, now
   });
 }
 
+export type QueueSettings = { ownerEvery: number | null };
+
+export function countHandouts(db: DatabaseSync, schemeId: string): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM handouts WHERE scheme_id = ?").get(schemeId) as { n: number };
+  return Number(row.n);
+}
+
+export function getQueueSettings(db: DatabaseSync, schemeId: string): QueueSettings {
+  const row = db.prepare("SELECT owner_every FROM queue_settings WHERE scheme_id = ?").get(schemeId) as
+    | { owner_every: number }
+    | undefined;
+  if (!row) return { ownerEvery: 3 };
+  const parsed = parseOwnerEvery(row.owner_every);
+  return { ownerEvery: parsed.ok ? parsed.ownerEvery : 3 };
+}
+
+export function setOwnerEvery(
+  db: DatabaseSync,
+  schemeId: string,
+  value: number,
+): { ok: true; ownerEvery: number | null } | { ok: false; reason: "invalid" } {
+  const parsed = parseOwnerEvery(value);
+  if (!parsed.ok) return { ok: false, reason: "invalid" };
+  db.prepare(
+    `INSERT INTO queue_settings (scheme_id, owner_every) VALUES (?, ?)
+     ON CONFLICT(scheme_id) DO UPDATE SET owner_every = excluded.owner_every`,
+  ).run(schemeId, parsed.ownerEvery ?? 0);
+  return { ok: true, ownerEvery: parsed.ownerEvery };
+}
+
+/** One owner link per scheme. Pass null to clear it. An inactive link may stay marked. */
+export function setOwnerLink(
+  db: DatabaseSync,
+  schemeId: string,
+  linkId: string | null,
+  now = Date.now(),
+): { ok: true } | { ok: false; reason: "missing" } {
+  return withTransaction(db, () => {
+    if (linkId) {
+      const row = db.prepare("SELECT id FROM links WHERE id = ? AND scheme_id = ?").get(linkId, schemeId) as
+        | { id: string }
+        | undefined;
+      if (!row) return { ok: false, reason: "missing" };
+    }
+    db.prepare("UPDATE links SET is_owner = 0, updated_at = ? WHERE scheme_id = ? AND is_owner = 1").run(now, schemeId);
+    if (linkId) {
+      db.prepare("UPDATE links SET is_owner = 1, updated_at = ? WHERE id = ?").run(now, linkId);
+    }
+    return { ok: true };
+  });
+}
+
 export function reorderLink(
   db: DatabaseSync,
   schemeId: string,
@@ -448,7 +540,12 @@ export function reorderLink(
 ) {
   withTransaction(db, () => {
     const links = listLinks(db, schemeId);
-    const updated = moveInQueue(links.map(toMember), id, direction);
+    const settings = getQueueSettings(db, schemeId);
+    const ownerReserved = settings.ownerEvery !== null && links.some((link) => link.owner && link.active);
+    const members = links.map(toMember).map((member) =>
+      ownerReserved && member.owner ? { ...member, active: false } : member,
+    );
+    const updated = moveInQueue(members, id, direction);
     const write = db.prepare("UPDATE links SET current_weight = ?, updated_at = ? WHERE id = ?");
     for (const member of updated) {
       if (!member.active) continue;
@@ -508,7 +605,7 @@ export function seedDemoIfEmpty(db: DatabaseSync) {
   const count = db.prepare("SELECT COUNT(*) AS n FROM links").get() as { n: number };
   if (count.n > 0) return;
   const base = Date.parse("2026-11-16T09:00:00Z");
-  DEMO_LINKS.forEach((link, index) => {
+  const inserted = DEMO_LINKS.map((link, index) =>
     adminInsertLink(db, {
       schemeId: edfScheme.id,
       email: link.email,
@@ -516,6 +613,7 @@ export function seedDemoIfEmpty(db: DatabaseSync) {
       url: `https://www.edfenergy.com/quote/refer-a-friend/${link.code}`,
       boosted: link.boosted,
       now: base + index * 1000,
-    });
-  });
+    }),
+  );
+  if (inserted[0]?.ok) setOwnerLink(db, edfScheme.id, inserted[0].id, base);
 }

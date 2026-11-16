@@ -20,6 +20,11 @@ export type QueueMember = {
   /** Unix epoch milliseconds. Older members win a tie. */
   createdAt: number;
   active: boolean;
+  /**
+   * The single site-owner link. Reserved turns use this flag.
+   * Omitted means "not the owner", so older callers stay valid.
+   */
+  owner?: boolean;
 };
 
 export type PickOutcome = {

@@ -21,6 +21,8 @@ import {
   noteRateEvent,
   reorderLink,
   setLinkActive,
+  setOwnerEvery,
+  setOwnerLink,
   submitLink,
 } from "@/lib/db/repository";
 import { parseEmail } from "@/lib/format";
@@ -209,6 +211,31 @@ export async function seedLinkAction(_prev: SeedState, formData: FormData): Prom
     return { error: "The link could not be added." };
   }
   return { ok: true };
+}
+
+export type OwnerEveryState = { error?: string; ok?: boolean };
+
+export async function setOwnerEveryAction(
+  _previous: OwnerEveryState,
+  formData: FormData,
+): Promise<OwnerEveryState> {
+  await requireAdmin();
+  const raw = String(formData.get("ownerEvery") ?? "").trim();
+  if (!/^\d+$/.test(raw)) {
+    return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
+  }
+  const result = setOwnerEvery(getDb(), edfScheme.id, Number(raw));
+  if (!result.ok) {
+    return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
+  }
+  return { ok: true };
+}
+
+export async function setOwnerLinkAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  const result = setOwnerLink(getDb(), edfScheme.id, id || null);
+  if (!result.ok) redirect("/admin?notice=missing");
 }
 
 export async function moveLinkAction(formData: FormData) {

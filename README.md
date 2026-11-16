@@ -31,6 +31,12 @@ That is smooth weighted round-robin. From a fresh queue it is exact:
 
 Inactive links are skipped and their score is left as it is.
 
+### The owner’s link
+
+The admin can mark one link as the owner link. By default it is handed out on turns 3, 6, 9, and so on, because that person runs the site. The interval is a setting on the admin page. `0` turns it off. `1` is rejected, because that would give the owner every visitor.
+
+An owner turn only adds one to that link’s handout count. It does not run the weighted rotation, so everyone else’s current weight stays exactly as it was. The other turns use the usual rotation among every active link except the owner. With the share off, or with no active owner link, every turn is the plain rotation, owner included when their link is active.
+
 ### The boost
 
 It is an honour system. FairTurn cannot see EDF’s accounts.

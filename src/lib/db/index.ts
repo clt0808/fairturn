@@ -1,7 +1,7 @@
 import "server-only";
 import fs from "fs";
 import path from "path";
-import { createAppDatabase, seedDemoIfEmpty } from "./repository";
+import { createAppDatabase, ensureQueueShape, seedDemoIfEmpty } from "./repository";
 import type { DatabaseSync } from "node:sqlite";
 
 const globalForDb = globalThis as unknown as { fairturnDb?: DatabaseSync };
@@ -14,5 +14,6 @@ export function getDb(): DatabaseSync {
     if (process.env.SEED_DEMO === "true") seedDemoIfEmpty(db);
     globalForDb.fairturnDb = db;
   }
+  ensureQueueShape(globalForDb.fairturnDb);
   return globalForDb.fairturnDb;
 }

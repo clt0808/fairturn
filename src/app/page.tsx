@@ -2,13 +2,21 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getDb } from "@/lib/db";
-import { listLinks } from "@/lib/db/repository";
-import { isBoostedWeight, previewSequence, type QueueMember } from "@/lib/queue";
+import { countHandouts, getQueueSettings, listLinks } from "@/lib/db/repository";
+import { isBoostedWeight, ownerShareCopy, previewHandouts, type QueueMember } from "@/lib/queue";
 import { edfScheme, offerPhase, offerSentence } from "@/lib/schemes/edf";
 
 export const dynamic = "force-dynamic";
 
-function toMember(link: { id: string; weight: number; currentWeight: number; handouts: number; createdAt: number; active: boolean }): QueueMember {
+function toMember(link: {
+  id: string;
+  weight: number;
+  currentWeight: number;
+  handouts: number;
+  createdAt: number;
+  active: boolean;
+  owner: boolean;
+}): QueueMember {
   return {
     id: link.id,
     weight: link.weight,
@@ -16,15 +24,32 @@ function toMember(link: { id: string; weight: number; currentWeight: number; han
     handouts: link.handouts,
     createdAt: link.createdAt,
     active: link.active,
+    owner: link.owner,
   };
 }
 
+function turnLabel(member: QueueMember | undefined, ownerShareOn: boolean): { text: string; className: string } {
+  if (member?.owner && ownerShareOn) return { text: "Owner link", className: "text-sm font-semibold text-copper" };
+  if (member && isBoostedWeight(member.weight)) {
+    return { text: "Boosted link", className: "text-sm font-semibold text-copper" };
+  }
+  return { text: "Standard link", className: "text-sm text-ink" };
+}
+
 export default function HomePage() {
-  const links = listLinks(getDb(), edfScheme.id).filter((link) => link.active);
+  const db = getDb();
+  const links = listLinks(db, edfScheme.id).filter((link) => link.active);
+  const settings = getQueueSettings(db, edfScheme.id);
+  const ownerShareOn = settings.ownerEvery !== null && links.some((link) => link.owner);
   const members = links.map(toMember);
-  const upcoming = previewSequence(members, 4).map((id) => members.find((member) => member.id === id));
-  const boosted = links.filter((link) => isBoostedWeight(link.weight)).length;
+  const handoutsSoFar = countHandouts(db, edfScheme.id);
+  const upcoming = previewHandouts(members, 4, {
+    handoutsSoFar,
+    ownerEvery: ownerShareOn ? settings.ownerEvery : null,
+  }).map((id) => members.find((member) => member.id === id));
+  const boosted = links.filter((link) => isBoostedWeight(link.weight) && !(ownerShareOn && link.owner)).length;
   const phase = offerPhase();
+  const shareCopy = ownerShareCopy(settings.ownerEvery, links.some((link) => link.owner));
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
@@ -39,6 +64,7 @@ export default function HomePage() {
             so one link cannot take every click.
           </p>
           <p className="mt-4 max-w-xl text-base leading-7 text-ink/80">{offerSentence()}</p>
+          <p className="mt-3 max-w-xl text-base leading-7 text-ink/80">{shareCopy}</p>
           {phase === "live" ? (
             <p className="mt-2 text-sm text-ink/60">
               EDF pays that credit, on EDF’s terms, after a successful switch. This site only chooses whose link is
@@ -70,19 +96,21 @@ export default function HomePage() {
             </p>
           ) : (
             <ol className="divide-y divide-line">
-              {upcoming.map((member, index) => (
-                <li key={`${member?.id ?? "empty"}-${index}`} className="flex items-center justify-between px-5 py-3">
-                  <span className="text-sm text-ink/60">Turn {index + 1}</span>
-                  <span className={member && isBoostedWeight(member.weight) ? "text-sm font-semibold text-copper" : "text-sm text-ink"}>
-                    {member && isBoostedWeight(member.weight) ? "Boosted link" : "Standard link"}
-                  </span>
-                </li>
-              ))}
+              {upcoming.map((member, index) => {
+                const label = turnLabel(member, ownerShareOn);
+                return (
+                  <li key={`${member?.id ?? "empty"}-${index}`} className="flex items-center justify-between px-5 py-3">
+                    <span className="text-sm text-ink/60">Turn {handoutsSoFar + index + 1}</span>
+                    <span className={label.className}>{label.text}</span>
+                  </li>
+                );
+              })}
             </ol>
           )}
           <p className="border-t border-line px-5 py-3 text-xs leading-5 text-ink/60">
             A boosted link can appear more than once in a short stretch. Across the whole queue it is offered about
             twice as often as a standard one.
+            {ownerShareOn ? " One turn in this list is the site owner’s link." : ""}
           </p>
         </Card>
       </div>
@@ -111,6 +139,7 @@ export default function HomePage() {
             </li>
           ))}
         </ol>
+        <p className="mt-6 max-w-prose text-base leading-7 text-ink/80">{shareCopy}</p>
       </section>
 
       <section className="mt-14 grid gap-6 lg:grid-cols-2">

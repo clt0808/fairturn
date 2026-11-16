@@ -7,6 +7,8 @@ import {
   listLinks,
   reorderLink,
   setLinkActive,
+  setOwnerEvery,
+  setOwnerLink,
   submitLink,
 } from "./repository";
 
@@ -271,5 +273,63 @@ describe("queue persistence", () => {
     reorderLink(db, schemeId, ids[0], "down", base + 5);
     const next = handOutLink(db, { schemeId, ipHash: "ip", now: base + 6 });
     expect(next).toMatchObject({ ok: true, code: "quiet-brook-1184" });
+  });
+
+  it("reserves every third handout for the owner without moving the others’ scores", () => {
+    const db = createAppDatabase();
+    const owner = adminInsertLink(db, {
+      schemeId,
+      email: "owner@example.com",
+      code: "calm-pebble-2208",
+      url: url("calm-pebble-2208"),
+      boosted: false,
+      now: base,
+    });
+    const linkA = adminInsertLink(db, {
+      schemeId,
+      email: "a@example.com",
+      code: "amber-lark-2401",
+      url: url("amber-lark-2401"),
+      boosted: false,
+      now: base + 1,
+    });
+    adminInsertLink(db, {
+      schemeId,
+      email: "b@example.com",
+      code: "quiet-brook-1184",
+      url: url("quiet-brook-1184"),
+      boosted: false,
+      now: base + 2,
+    });
+    expect(owner.ok && linkA.ok).toBe(true);
+    if (!owner.ok) return;
+    expect(setOwnerLink(db, schemeId, owner.id, base + 3)).toEqual({ ok: true });
+    expect(setOwnerEvery(db, schemeId, 3)).toMatchObject({ ok: true, ownerEvery: 3 });
+    expect(setOwnerLink(db, schemeId, linkA.ok ? linkA.id : owner.id, base + 4).ok).toBe(true);
+    expect(setOwnerLink(db, schemeId, owner.id, base + 5)).toEqual({ ok: true });
+    expect(listLinks(db, schemeId).filter((link) => link.owner).map((link) => link.email)).toEqual([
+      "owner@example.com",
+    ]);
+
+    const handed: string[] = [];
+    for (let turn = 0; turn < 9; turn += 1) {
+      const result = handOutLink(db, { schemeId, ipHash: `ip-${turn}`, now: base + 10 + turn });
+      expect(result.ok).toBe(true);
+      if (result.ok) handed.push(result.code);
+    }
+
+    expect(handed).toEqual([
+      "amber-lark-2401",
+      "quiet-brook-1184",
+      "calm-pebble-2208",
+      "amber-lark-2401",
+      "quiet-brook-1184",
+      "calm-pebble-2208",
+      "amber-lark-2401",
+      "quiet-brook-1184",
+      "calm-pebble-2208",
+    ]);
+    const scores = Object.fromEntries(listLinks(db, schemeId).map((link) => [link.code, link.currentWeight]));
+    expect(scores["calm-pebble-2208"]).toBe(0);
   });
 });

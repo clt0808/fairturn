@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { logoutAction, moveLinkAction, removeLinkAction, restoreLinkAction } from "@/app/actions";
+import { logoutAction, moveLinkAction, removeLinkAction, restoreLinkAction, setOwnerLinkAction } from "@/app/actions";
 import { LoginForm } from "@/app/admin/login-form";
+import { OwnerSettingsForm } from "@/app/admin/owner-settings-form";
 import { SeedForm } from "@/app/admin/seed-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ADMIN_COOKIE, adminConfigured, readAdminSession } from "@/lib/admin/session";
 import { getDb } from "@/lib/db";
-import { listLinks, type LinkRow } from "@/lib/db/repository";
+import { getQueueSettings, listLinks, type LinkRow } from "@/lib/db/repository";
 import { formatWhen } from "@/lib/format";
-import { isBoostedWeight, rankForNextPick, type QueueMember } from "@/lib/queue";
+import { isBoostedWeight, ordinalWord, rankForNextPick, type QueueMember } from "@/lib/queue";
 import { edfScheme } from "@/lib/schemes/edf";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -29,6 +30,7 @@ function toMember(link: LinkRow): QueueMember {
     handouts: link.handouts,
     createdAt: link.createdAt,
     active: link.active,
+    owner: link.owner,
   };
 }
 
@@ -62,13 +64,19 @@ export default async function AdminPage({
 
   const params = await searchParams;
   const notice = params.notice ? notices[params.notice] : undefined;
-  const links = listLinks(getDb(), edfScheme.id);
+  const db = getDb();
+  const links = listLinks(db, edfScheme.id);
+  const settings = getQueueSettings(db, edfScheme.id);
+  const ownerShareOn = settings.ownerEvery !== null;
   const active = links.filter((link) => link.active);
   const removed = links.filter((link) => !link.active);
-  const ranked = rankForNextPick(active.map(toMember));
+  const ownerLink = links.find((link) => link.owner) ?? null;
+  const fairLinks = active.filter((link) => !(ownerShareOn && link.owner));
+  const ranked = rankForNextPick(fairLinks.map(toMember));
   const rankOf = new Map(ranked.map((member, index) => [member.id, index + 1]));
-  const ordered = [...active].sort((a, b) => (rankOf.get(a.id) ?? 99) - (rankOf.get(b.id) ?? 99));
+  const ordered = [...fairLinks].sort((a, b) => (rankOf.get(a.id) ?? 99) - (rankOf.get(b.id) ?? 99));
   const handouts = links.reduce((sum, link) => sum + link.handouts, 0);
+  const intervalLabel = settings.ownerEvery ? `every ${ordinalWord(settings.ownerEvery)} turn` : "off";
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -104,14 +112,58 @@ export default async function AdminPage({
         </div>
       </Card>
 
-      <section className="mt-10">
-        <h2 className="font-serif text-2xl">Active links</h2>
+      <Card className="mt-8 border-copper px-5 py-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-copper">Owner link</p>
+        <h2 className="mt-1 font-serif text-2xl">
+          {ownerLink ? ownerLink.email : "No owner link yet"}
+        </h2>
         <p className="mt-2 max-w-prose text-sm leading-6 text-ink/70">
-          Up and down change who is offered next. They do not change a link’s weight. The next handout follows the
-          order below.
+          {ownerShareOn
+            ? `This link is handed out ${intervalLabel}. Those turns are kept out of the fair rotation, so they do not change anyone else’s score. Only one link can be the owner link.`
+            : "The owner share is off, so this link takes a normal turn with everyone else. Set the interval to 3 to hand it out on turns 3, 6, 9, and so on."}
+        </p>
+        {ownerLink ? (
+          <div className="mt-4">
+            <p className="break-all font-medium">{ownerLink.url}</p>
+            <p className="mt-1 text-sm text-ink/70">
+              {ownerLink.active ? "Active" : "Removed, so the reserved turns are paused"} · {ownerLink.handouts}{" "}
+              {ownerLink.handouts === 1 ? "handout" : "handouts"}
+              {isBoostedWeight(ownerLink.weight) ? " · Boosted weight, used only when the share is off" : ""}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <form action={setOwnerLinkAction}>
+                <input type="hidden" name="id" value="" />
+                <Button type="submit" variant="outline" size="sm">
+                  Clear owner
+                </Button>
+              </form>
+              {ownerLink.active ? (
+                <form action={removeLinkAction}>
+                  <input type="hidden" name="id" value={ownerLink.id} />
+                  <Button type="submit" variant="danger" size="sm">
+                    Remove
+                  </Button>
+                </form>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-ink/70">Choose “Make owner link” on one row below.</p>
+        )}
+        <div className="mt-5">
+          <OwnerSettingsForm ownerEvery={settings.ownerEvery} />
+        </div>
+      </Card>
+
+      <section className="mt-10">
+        <h2 className="font-serif text-2xl">Fair rotation</h2>
+        <p className="mt-2 max-w-prose text-sm leading-6 text-ink/70">
+          {ownerShareOn
+            ? "Up and down change who is offered on the turns that are not reserved for the owner. They do not change a link’s weight."
+            : "Up and down change who is offered next. They do not change a link’s weight. The next handout follows the order below."}
         </p>
         {ordered.length === 0 ? (
-          <p className="mt-4 text-ink/70">No active links.</p>
+          <p className="mt-4 text-ink/70">No other links are in the fair rotation.</p>
         ) : (
           <ul className="mt-4 space-y-3">
             {ordered.map((link) => (
@@ -149,6 +201,21 @@ export default async function AdminPage({
                           Remove
                         </Button>
                       </form>
+                      {link.owner ? (
+                        <form action={setOwnerLinkAction}>
+                          <input type="hidden" name="id" value="" />
+                          <Button type="submit" variant="outline" size="sm">
+                            Clear owner
+                          </Button>
+                        </form>
+                      ) : (
+                        <form action={setOwnerLinkAction}>
+                          <input type="hidden" name="id" value={link.id} />
+                          <Button type="submit" variant="outline" size="sm">
+                            Make owner link
+                          </Button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -168,7 +235,9 @@ export default async function AdminPage({
               <li key={link.id} className="rounded-lg border border-line bg-card px-4 py-4">
                 <p className="break-all">{link.url}</p>
                 <p className="mt-1 text-sm text-ink/70">
-                  {link.email} · {link.handouts} {link.handouts === 1 ? "handout" : "handouts"}
+                  {link.email}
+                  {link.owner ? " · Owner link" : ""} · {link.handouts}{" "}
+                  {link.handouts === 1 ? "handout" : "handouts"}
                 </p>
                 <form action={restoreLinkAction} className="mt-3">
                   <input type="hidden" name="id" value={link.id} />

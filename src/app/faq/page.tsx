@@ -1,9 +1,17 @@
 import type { Metadata } from "next";
+import { getDb } from "@/lib/db";
+import { getQueueSettings, listLinks } from "@/lib/db/repository";
+import { ownerShareCopy } from "@/lib/queue";
 import { edfScheme, offerSentence } from "@/lib/schemes/edf";
 
 export const metadata: Metadata = { title: "FAQ" };
+export const dynamic = "force-dynamic";
 
-const questions: { q: string; a: string }[] = [
+function questions(): { q: string; a: string }[] {
+  const db = getDb();
+  const settings = getQueueSettings(db, edfScheme.id);
+  const hasOwner = listLinks(db, edfScheme.id).some((link) => link.owner && link.active);
+  return [
   {
     q: "Is FairTurn part of EDF?",
     a: "No. Quotes and switches happen on edfenergy.com. FairTurn only rotates links that members paste in. Check the tariff yourself before you switch.",
@@ -15,6 +23,10 @@ const questions: { q: string; a: string }[] = [
   {
     q: "How does the rotation work?",
     a: "Each standard link has weight 1 and each boosted link has weight 2. The next visitor is offered the link that is furthest behind its share. When weights are equal, the older link wins a tie. Over a full cycle a boosted link is handed out about twice as often as a standard one, and equal links get equal turns.",
+  },
+  {
+    q: "Why does the owner’s link appear on a fixed turn?",
+    a: `${ownerShareCopy(settings.ownerEvery, hasOwner)} Only one link can be the owner link. It is chosen on the admin page.`,
   },
   {
     q: "How do I get the boost?",
@@ -41,8 +53,10 @@ const questions: { q: string; a: string }[] = [
     a: "The email and referral link of people who join the queue, claim codes, handout counts, and a hash of the network address for abuse limits. No name, home address, meter, or payment details. See the privacy note.",
   },
 ];
+}
 
 export default function FaqPage() {
+  const items = questions();
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <h1 className="font-serif text-4xl">Questions</h1>
@@ -50,7 +64,7 @@ export default function FaqPage() {
         Short answers. The notice at the top of every page is the part to read before you use or share a link.
       </p>
       <div className="mt-8 divide-y divide-line border-y border-line">
-        {questions.map((item) => (
+        {items.map((item) => (
           <details key={item.q} className="group py-4">
             <summary className="cursor-pointer list-none font-serif text-xl [&::-webkit-details-marker]:hidden">
               <span className="mr-2 text-copper group-open:hidden">+</span>
