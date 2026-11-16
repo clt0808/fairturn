@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { edfScheme } from "@/lib/schemes/edf";
+import { parseFuseReferralCode } from "@/lib/schemes/fuse";
+import { octopusScheme } from "@/lib/schemes/octopus";
 import { MIGRATION_SQL } from "./schema";
 import {
   adminInsertLink,
@@ -341,5 +343,92 @@ describe("queue persistence", () => {
     ]);
     const scores = Object.fromEntries((await listLinks(db, schemeId)).map((link) => [link.code, link.currentWeight]));
     expect(scores["calm-pebble-2208"]).toBe(0);
+  });
+
+  it("keeps each provider’s queue and claim codes separate", async () => {
+    const db = await createAppDatabase();
+    const edf = await adminInsertLink(db, {
+      schemeId,
+      email: "edf@example.com",
+      code: "amber-lark-2401",
+      url: url("amber-lark-2401"),
+      boosted: false,
+      now: base,
+    });
+    const octopus = await adminInsertLink(db, {
+      schemeId: octopusScheme.id,
+      email: "octopus@example.com",
+      code: "bright-reef-240",
+      url: "https://share.octopus.energy/bright-reef-240",
+      boosted: false,
+      now: base + 1,
+    });
+    expect(edf.ok && octopus.ok).toBe(true);
+
+    const handed = await handOutLink(db, {
+      schemeId,
+      ipHash: "visitor",
+      now: base + 2,
+      newClaimCode: () => "ABCD2345",
+    });
+    expect(handed.ok && handed.code).toBe("amber-lark-2401");
+
+    const cross = await submitLink(db, {
+      schemeId: octopusScheme.id,
+      email: "joiner@example.com",
+      code: "quiet-brook-1184",
+      url: "https://share.octopus.energy/quiet-brook-1184",
+      claimCode: "ABCD2345",
+      ipHash: "joiner",
+      now: base + 3,
+    });
+    expect(cross).toMatchObject({ ok: false, reason: "claim-provider" });
+
+    const same = await submitLink(db, {
+      schemeId,
+      email: "edf-joiner@example.com",
+      code: "quiet-brook-1184",
+      url: url("quiet-brook-1184"),
+      claimCode: "ABCD2345",
+      ipHash: "joiner",
+      now: base + 4,
+    });
+    expect(same).toMatchObject({ ok: true, boosted: true });
+
+    const octopusHandout = await handOutLink(db, { schemeId: octopusScheme.id, ipHash: "other", now: base + 5 });
+    expect(octopusHandout).toMatchObject({ ok: true, code: "bright-reef-240" });
+    expect((await listLinks(db, octopusScheme.id)).filter((link) => link.boosted)).toHaveLength(0);
+  });
+
+  it("rejects a second Fuse code that normalises to the same value", async () => {
+    const db = await createAppDatabase();
+    const first = parseFuseReferralCode("po-litics");
+    const again = parseFuseReferralCode("POLITICS");
+    expect(first.ok && again.ok).toBe(true);
+    if (!first.ok || !again.ok) return;
+    expect(
+      (
+        await submitLink(db, {
+          schemeId: "fuse",
+          email: "one@example.com",
+          code: first.code,
+          url: first.canonicalUrl,
+          claimCode: null,
+          ipHash: "ip",
+          now: base,
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      await submitLink(db, {
+        schemeId: "fuse",
+        email: "two@example.com",
+        code: again.code,
+        url: again.canonicalUrl,
+        claimCode: null,
+        ipHash: "ip",
+        now: base + 1,
+      }),
+    ).toMatchObject({ ok: false, reason: "code-taken" });
   });
 });

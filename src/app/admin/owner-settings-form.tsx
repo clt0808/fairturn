@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 
 const initial: OwnerEveryState = {};
 
-export function OwnerSettingsForm({ ownerEvery }: { ownerEvery: number | null }) {
+export function OwnerSettingsForm({ ownerEvery, provider }: { ownerEvery: number | null; provider: string }) {
   const [state, action, pending] = useActionState(setOwnerEveryAction, initial);
 
   return (
     <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <input type="hidden" name="provider" value={provider} />
       <div className="space-y-2">
         <Label htmlFor="owner-every">Owner link every N turns</Label>
         <Input

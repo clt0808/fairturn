@@ -1,7 +1,10 @@
 import { edfScheme } from "./edf";
+import { fuseScheme } from "./fuse";
+import { octopusScheme } from "./octopus";
 import type { ReferralScheme } from "./types";
+import { zopaScheme } from "./zopa";
 
-const schemes: readonly ReferralScheme[] = [edfScheme];
+const schemes: readonly ReferralScheme[] = [edfScheme, octopusScheme, zopaScheme, fuseScheme];
 
 export function listSchemes(): readonly ReferralScheme[] {
   return schemes;

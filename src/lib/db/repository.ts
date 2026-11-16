@@ -73,6 +73,7 @@ export type SubmitReason =
   | "email-taken"
   | "code-taken"
   | "boost-cap"
+  | "claim-provider"
   | `claim-${ClaimRejectReason}`;
 
 export type SubmitResult =
@@ -150,6 +151,15 @@ export async function ensureQueueShape(db: AppDatabase) {
     await db.exec("ALTER TABLE links ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0");
   }
   await execSql(db, OWNER_INDEX_SQL);
+  for (const table of ["links", "claim_tokens", "handouts", "queue_settings"] as const) {
+    const columns = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    if (!columns.results.some((column) => column.name === "provider")) {
+      await db.exec(`ALTER TABLE ${table} ADD COLUMN provider TEXT NOT NULL DEFAULT 'edf'`);
+    }
+    await db
+      .prepare(`UPDATE ${table} SET provider = scheme_id WHERE scheme_id <> 'edf' AND provider = 'edf'`)
+      .run();
+  }
 }
 
 async function pruneRates(db: AppDatabase, now: number) {
@@ -229,6 +239,10 @@ export async function submitLink(
 
     if (input.claimCode) {
       const token = await db.prepare("SELECT * FROM claim_tokens WHERE code = ?").bind(input.claimCode).first<TokenSql>();
+      if (token && token.scheme_id !== input.schemeId) {
+        await noteRate(db, "submit", input.ipHash, now);
+        return { ok: false, reason: "claim-provider" };
+      }
       const decision = evaluateClaim({
         rawCode: input.claimCode,
         token: token
@@ -273,11 +287,12 @@ export async function submitLink(
     await db
       .prepare(
         `INSERT INTO links (
-        id, scheme_id, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
+        id, scheme_id, provider, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
       )
       .bind(
         id,
+        input.schemeId,
         input.schemeId,
         email,
         input.code,
@@ -332,10 +347,10 @@ export async function adminInsertLink(
     await db
       .prepare(
         `INSERT INTO links (
-        id, scheme_id, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
+        id, scheme_id, provider, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
       )
-      .bind(id, input.schemeId, email, input.code, input.url, weight, input.boosted ? 1 : 0, now, now)
+      .bind(id, input.schemeId, input.schemeId, email, input.code, input.url, weight, input.boosted ? 1 : 0, now, now)
       .run();
     return { ok: true, boosted: input.boosted, id };
   });
@@ -375,17 +390,17 @@ export async function handOutLink(
     await db
       .prepare(
         `INSERT INTO claim_tokens (
-        id, code, scheme_id, link_id, handed_code, created_at, expires_at, ip_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, code, scheme_id, provider, link_id, handed_code, created_at, expires_at, ip_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(tokenId, claimCode, input.schemeId, link.id, link.code, now, now + CLAIM_TTL_MS, input.ipHash)
+      .bind(tokenId, claimCode, input.schemeId, input.schemeId, link.id, link.code, now, now + CLAIM_TTL_MS, input.ipHash)
       .run();
 
     await db
       .prepare(
-        "INSERT INTO handouts (id, scheme_id, link_id, token_id, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO handouts (id, scheme_id, provider, link_id, token_id, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(crypto.randomUUID(), input.schemeId, link.id, tokenId, now, input.ipHash)
+      .bind(crypto.randomUUID(), input.schemeId, input.schemeId, link.id, tokenId, now, input.ipHash)
       .run();
 
     await noteRate(db, "handout", input.ipHash, now);
@@ -448,10 +463,10 @@ export async function setOwnerEvery(
   if (!parsed.ok) return { ok: false, reason: "invalid" };
   await db
     .prepare(
-      `INSERT INTO queue_settings (scheme_id, owner_every) VALUES (?, ?)
-     ON CONFLICT(scheme_id) DO UPDATE SET owner_every = excluded.owner_every`,
+      `INSERT INTO queue_settings (scheme_id, owner_every, provider) VALUES (?, ?, ?)
+     ON CONFLICT(scheme_id) DO UPDATE SET owner_every = excluded.owner_every, provider = excluded.provider`,
     )
-    .bind(schemeId, parsed.ownerEvery ?? 0)
+    .bind(schemeId, parsed.ownerEvery ?? 0, schemeId)
     .run();
   return { ok: true, ownerEvery: parsed.ownerEvery };
 }
@@ -507,6 +522,7 @@ export async function reorderLink(
 
 export type TicketView = {
   claimCode: string;
+  schemeId: string;
   url: string;
   referralCode: string;
   consumed: boolean;
@@ -517,15 +533,16 @@ export type TicketView = {
 export async function lookupTicket(db: AppDatabase, claimCode: string, now = Date.now()): Promise<TicketView | null> {
   const row = await db
     .prepare(
-      `SELECT t.code, t.expires_at, t.consumed_at, l.url, l.code AS referral_code, l.email
+      `SELECT t.code, t.scheme_id, t.expires_at, t.consumed_at, l.url, l.code AS referral_code, l.email
        FROM claim_tokens t
        JOIN links l ON l.id = t.link_id
        WHERE t.code = ?`,
     )
     .bind(claimCode)
     .first<{
-      code: string;
-      expires_at: number;
+        code: string;
+        scheme_id: string;
+        expires_at: number;
       consumed_at: number | null;
       url: string;
       referral_code: string;
@@ -535,6 +552,7 @@ export async function lookupTicket(db: AppDatabase, claimCode: string, now = Dat
   if (!row) return null;
   return {
     claimCode: row.code,
+    schemeId: row.scheme_id,
     url: row.url,
     referralCode: row.referral_code,
     consumed: row.consumed_at !== null,

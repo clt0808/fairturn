@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db";
 import { getQueueSettings, listLinks, type LinkRow } from "@/lib/db/repository";
 import { formatWhen } from "@/lib/format";
 import { isBoostedWeight, ordinalWord, rankForNextPick, type QueueMember } from "@/lib/queue";
-import { edfScheme } from "@/lib/schemes/edf";
+import { getScheme, listSchemes, requireScheme } from "@/lib/schemes";
 
 export const metadata: Metadata = { title: "Admin" };
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ function toMember(link: LinkRow): QueueMember {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string; provider?: string }>;
 }) {
   if (!adminConfigured()) {
     return (
@@ -63,10 +63,11 @@ export default async function AdminPage({
   }
 
   const params = await searchParams;
+  const scheme = getScheme(params.provider ?? "") ?? requireScheme("edf");
   const notice = params.notice ? notices[params.notice] : undefined;
   const db = await getDb();
-  const links = await listLinks(db, edfScheme.id);
-  const settings = await getQueueSettings(db, edfScheme.id);
+  const links = await listLinks(db, scheme.id);
+  const settings = await getQueueSettings(db, scheme.id);
   const ownerShareOn = settings.ownerEvery !== null;
   const active = links.filter((link) => link.active);
   const removed = links.filter((link) => !link.active);
@@ -82,7 +83,7 @@ export default async function AdminPage({
     <main className="mx-auto max-w-5xl px-4 py-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-serif text-4xl">Queue admin</h1>
+          <h1 className="font-serif text-4xl">{scheme.supplierName}</h1>
           <p className="mt-2 text-ink/70">
             {active.length} active · {handouts} {handouts === 1 ? "handout" : "handouts"} ·{" "}
             {active.filter((link) => isBoostedWeight(link.weight)).length} boosted
@@ -95,6 +96,14 @@ export default async function AdminPage({
         </form>
       </div>
 
+      <nav aria-label="Provider" className="mt-6 flex flex-wrap gap-2">
+        {listSchemes().map((item) => (
+          <Button key={item.id} asChild variant={item.id === scheme.id ? "default" : "outline"} size="sm">
+            <a href={`/admin?provider=${item.id}`}>{item.supplierName}</a>
+          </Button>
+        ))}
+      </nav>
+
       {notice ? (
         <p role="status" className="mt-6 rounded-md border border-[#e7c8c8] bg-[#f8ecec] px-3 py-2 text-sm text-[#8d2f2f]">
           {notice}
@@ -104,11 +113,10 @@ export default async function AdminPage({
       <Card className="mt-8 px-5 py-5">
         <h2 className="font-serif text-2xl">Add a link</h2>
         <p className="mt-2 max-w-prose text-sm leading-6 text-ink/70">
-          Use this to seed your own EDF link, or to fix the queue. It skips the public rate limit and does not need a
-          claim code. The same checks on the link shape, one email, and duplicate links still apply.
+          Adds a link to this provider’s queue. It skips the public rate limit.
         </p>
         <div className="mt-4">
-          <SeedForm />
+          <SeedForm provider={scheme.id} entry={scheme.entry} example={scheme.exampleUrl} />
         </div>
       </Card>
 
@@ -131,14 +139,14 @@ export default async function AdminPage({
               {isBoostedWeight(ownerLink.weight) ? " · Boosted weight, used only when the share is off" : ""}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <form action={setOwnerLinkAction}>
+              <form action={setOwnerLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                 <input type="hidden" name="id" value="" />
                 <Button type="submit" variant="outline" size="sm">
                   Clear owner
                 </Button>
               </form>
               {ownerLink.active ? (
-                <form action={removeLinkAction}>
+                <form action={removeLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                   <input type="hidden" name="id" value={ownerLink.id} />
                   <Button type="submit" variant="danger" size="sm">
                     Remove
@@ -151,7 +159,7 @@ export default async function AdminPage({
           <p className="mt-3 text-sm text-ink/70">Choose “Make owner link” on one row below.</p>
         )}
         <div className="mt-5">
-          <OwnerSettingsForm ownerEvery={settings.ownerEvery} />
+          <OwnerSettingsForm ownerEvery={settings.ownerEvery} provider={scheme.id} />
         </div>
       </Card>
 
@@ -181,35 +189,35 @@ export default async function AdminPage({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <form action={moveLinkAction}>
+                      <form action={moveLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                         <input type="hidden" name="id" value={link.id} />
                         <input type="hidden" name="direction" value="up" />
                         <Button type="submit" variant="outline" size="sm">
                           Move up
                         </Button>
                       </form>
-                      <form action={moveLinkAction}>
+                      <form action={moveLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                         <input type="hidden" name="id" value={link.id} />
                         <input type="hidden" name="direction" value="down" />
                         <Button type="submit" variant="outline" size="sm">
                           Move down
                         </Button>
                       </form>
-                      <form action={removeLinkAction}>
+                      <form action={removeLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                         <input type="hidden" name="id" value={link.id} />
                         <Button type="submit" variant="danger" size="sm">
                           Remove
                         </Button>
                       </form>
                       {link.owner ? (
-                        <form action={setOwnerLinkAction}>
+                        <form action={setOwnerLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                           <input type="hidden" name="id" value="" />
                           <Button type="submit" variant="outline" size="sm">
                             Clear owner
                           </Button>
                         </form>
                       ) : (
-                        <form action={setOwnerLinkAction}>
+                        <form action={setOwnerLinkAction}><input type="hidden" name="provider" value={scheme.id} />
                           <input type="hidden" name="id" value={link.id} />
                           <Button type="submit" variant="outline" size="sm">
                             Make owner link
@@ -239,7 +247,7 @@ export default async function AdminPage({
                   {link.owner ? " · Owner link" : ""} · {link.handouts}{" "}
                   {link.handouts === 1 ? "handout" : "handouts"}
                 </p>
-                <form action={restoreLinkAction} className="mt-3">
+                <form action={restoreLinkAction} className="mt-3"><input type="hidden" name="provider" value={scheme.id} />
                   <input type="hidden" name="id" value={link.id} />
                   <Button type="submit" variant="outline" size="sm">
                     Restore
