@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { SchemeTerms } from "@/components/scheme-terms";
 import { Button } from "@/components/ui/button";
 import { getDb } from "@/lib/db";
 import { getQueueSettings, listLinks } from "@/lib/db/repository";
@@ -46,6 +47,9 @@ export default async function ProviderPage({ params }: { params: Promise<{ provi
         <Button asChild variant="outline" size="lg" className="w-full">
           <Link href={`/p/${scheme.id}/add`}>Add my link</Link>
         </Button>
+      </div>
+      <div className="mt-4">
+        <SchemeTerms scheme={scheme} />
       </div>
     </main>
   );

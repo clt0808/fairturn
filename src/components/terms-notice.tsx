@@ -1,16 +1,10 @@
-import { listSchemes } from "@/lib/schemes";
-
-export function TermsNotice() {
+export function BonusBanner({ lines }: { lines: { id: string; text: string }[] }) {
+  if (lines.length === 0) return null;
   return (
-    <aside className="border-b border-[#e2c8a4] bg-warn text-warn-ink" aria-label="Referral terms">
-      <ul className="mx-auto max-w-5xl space-y-1 px-4 py-3 text-sm leading-6">
-        {listSchemes().map((scheme) => (
-          <li key={scheme.id}>
-            {scheme.termsLine}{" "}
-            <a className="underline underline-offset-2" href={scheme.termsUrl}>
-              {scheme.supplierName} terms
-            </a>
-          </li>
+    <aside className="border-b border-[#e2c8a4] bg-warn text-warn-ink" aria-label="Current bonuses">
+      <ul className="mx-auto max-w-5xl px-4 py-1.5 text-xs leading-5">
+        {lines.map((line) => (
+          <li key={line.id}>{line.text}</li>
         ))}
       </ul>
     </aside>
