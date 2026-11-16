@@ -68,11 +68,12 @@ Removing a link deactivates it and keeps its handout count. It can be restored u
 
 ## Run it locally
 
-Node.js 22 or newer. The app uses Node’s built-in SQLite (`node:sqlite`). No separate database server.
+Node.js 22 or newer. The site runs as a Cloudflare Worker (vinext). The queue is stored in D1. Tests use an in-memory SQLite shim with the same async calls.
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .dev.vars
+npx wrangler d1 migrations apply fairturn --local
 npm test
 npm run dev
 ```
@@ -81,38 +82,32 @@ Open http://127.0.0.1:43123
 
 `npm test` runs the queue, boost, claim, URL, and database tests.
 
-For a local demo, set `SEED_DEMO=true` in `.env.local` before the first start. That inserts four fictional `example.com` links when the database is empty. The site shows a banner while any of those are still active. Do not use the sample admin password from a shared example file on a public server. Set your own.
+For a local demo, set `SEED_DEMO=true` in `.dev.vars` before the first start. That inserts four fictional `example.com` links when the database is empty. The site shows a banner while any of those are still active. Do not use the sample admin password from a shared example file on a public server. Set your own.
 
 | Variable | Purpose |
 | --- | --- |
-| `ADMIN_PASSWORD` | Password for `/admin`. The admin page will not log anyone in until this is set. |
-| `AUTH_SECRET` | Signs the admin cookie. Falls back to `ADMIN_PASSWORD`. |
-| `IP_HASH_SALT` | Salt for network-address hashes. |
-| `DATABASE_PATH` | SQLite file. Defaults to `./data/fairturn.db`. |
-| `SEED_DEMO` | `true` loads sample links into an empty database. Leave unset in public. |
+| `ADMIN_PASSWORD` | Password for `/admin`. The admin page will not log anyone in until this is set. Worker secret. |
+| `AUTH_SECRET` | Signs the admin cookie. Falls back to `ADMIN_PASSWORD`. Worker secret. |
+| `IP_HASH_SALT` | Salt for network-address hashes. Worker secret. |
+| `SEED_DEMO` | `true` loads sample links into an empty database. `false` on the public Worker. |
 
-## Deploy it on Render
+## Deploy it on Cloudflare Workers
 
-`render.yaml` is a Render Blueprint for one web service. SQLite has one writer, so the service stays at a single instance. The persistent disk is the whole queue. Back it up. A serverless host with an ephemeral filesystem will wipe it.
+The Worker name is `fairturn`. D1 database `fairturn` is bound as `DB`. `wrangler.jsonc` holds the account, the compatibility date, `nodejs_compat`, and `SEED_DEMO=false`. Apply `migrations/0001_init.sql` to that database before the first request.
 
-Render builds with `npm ci --include=dev && npm run build` and starts with `npm start`. `npm start` listens on `PORT` (Render sets this) and falls back to 43123. The health check is `GET /health`. Node is 22 (`engines` and `.node-version`).
+`ADMIN_PASSWORD`, `AUTH_SECRET`, and `IP_HASH_SALT` are Worker secrets. They are not in git. Set them on the Worker before anyone uses `/admin`. Visitor addresses are read from `CF-Connecting-IP`. `GET /health` checks that D1 answers `SELECT 1`.
 
-| Variable | On Render |
-| --- | --- |
-| `ADMIN_PASSWORD` | You type this in the dashboard when the Blueprint is created. It is not in git. |
-| `AUTH_SECRET` | Render generates it. |
-| `IP_HASH_SALT` | Render generates it. |
-| `DATABASE_PATH` | `/var/data/fairturn.db` on the disk mounted at `/var/data`. |
-| `SEED_DEMO` | `false`. Leave it that way. |
-| `NODE_VERSION` | `22`. |
+```bash
+npm run build
+npx wrangler d1 migrations apply fairturn --local
+npm start
+```
+
+`npm run build` is the vinext production build. `npm start` serves that build with Wrangler and the local D1 database.
+
+D1 does not offer interactive `BEGIN`/`COMMIT`. A single request still runs the queue statements in the same order as before. Two requests at the same moment are not wrapped in one SQLite transaction; the claim-token update still accepts only one winner (`consumed_at IS NULL`).
 
 After the first deploy, open `/admin`, enter `ADMIN_PASSWORD`, and add your own EDF link. Mark it as the owner link there if you want the every-third-turn share.
-
-`node:sqlite` is still marked experimental in Node 22. It is built in, so there is no native module to compile. Stay on Node 22 until a newer Node has been re-tested.
-
-Emails of people who add a link are visible to anyone with the admin password. Treat that password like a database credential.
-
-`node:sqlite` is still marked experimental in Node 22. It is built in, so there is no native module to compile. Plan to stay on Node 22 until you have re-tested a move to a newer Node.
 
 Emails of people who add a link are visible to anyone with the admin password. Treat that password like a database credential.
 
@@ -122,5 +117,5 @@ Emails of people who add a link are visible to anyone with the admin password. T
 - `src/lib/schemes` — supplier definitions. EDF is the only one registered.
 - `src/lib/claims` — claim codes and the honour-system checks.
 - `src/lib/abuse` — rate-limit windows.
-- `src/lib/db` — SQLite. Pages call this; the queue module does not.
+- `src/lib/db` — D1 (tests use a local SQLite shim). Pages call this; the queue module does not.
 - `src/app` — landing page, get a link, add a link, FAQ, privacy note, and `/admin`.

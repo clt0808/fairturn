@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 
 export function clientAddress(headerStore: Headers): string {
+  const connecting = headerStore.get("cf-connecting-ip")?.trim();
+  if (connecting) return connecting.slice(0, 80);
   const forwarded = headerStore.get("x-forwarded-for");
   if (forwarded) {
     const first = forwarded.split(",")[0]?.trim();

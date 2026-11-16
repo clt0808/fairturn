@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import {
   BOOST_RULES,
   CLAIM_TTL_MS,
@@ -19,6 +18,10 @@ import {
   type QueueMember,
 } from "@/lib/queue";
 import { edfScheme } from "@/lib/schemes/edf";
+import { OWNER_INDEX_SQL, SCHEMA_SQL } from "./schema";
+import type { AppDatabase } from "./types";
+
+export type { AppDatabase } from "./types";
 
 export type LinkRow = {
   id: string;
@@ -89,20 +92,10 @@ export type HandoutResult =
 
 export type ActiveResult = { ok: true } | { ok: false; reason: "missing" | "email-taken" | "code-taken" };
 
-function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = fn();
-    db.exec("COMMIT");
-    return result;
-  } catch (error) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      /* already closed */
-    }
-    throw error;
-  }
+async function withTransaction<T>(db: AppDatabase, fn: () => Promise<T>): Promise<T> {
+  if (db.transaction) return db.transaction(fn);
+  // D1 has no interactive BEGIN/COMMIT. Statements run in this same order.
+  return fn();
 }
 
 function mapLink(row: LinkSql): LinkRow {
@@ -135,142 +128,84 @@ function toMember(link: LinkRow): QueueMember {
   };
 }
 
-export function createAppDatabase(filename = ":memory:"): DatabaseSync {
-  const db = new DatabaseSync(filename);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 3000;
-
-    CREATE TABLE IF NOT EXISTS links (
-      id TEXT PRIMARY KEY,
-      scheme_id TEXT NOT NULL,
-      email TEXT NOT NULL,
-      code TEXT NOT NULL,
-      url TEXT NOT NULL,
-      weight INTEGER NOT NULL,
-      current_weight INTEGER NOT NULL,
-      handouts INTEGER NOT NULL DEFAULT 0,
-      boosted INTEGER NOT NULL DEFAULT 0,
-      active INTEGER NOT NULL DEFAULT 1,
-      is_owner INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS links_active_email
-      ON links(scheme_id, email) WHERE active = 1;
-
-    CREATE UNIQUE INDEX IF NOT EXISTS links_active_code
-      ON links(scheme_id, code) WHERE active = 1;
-
-    CREATE TABLE IF NOT EXISTS claim_tokens (
-      id TEXT PRIMARY KEY,
-      code TEXT NOT NULL UNIQUE,
-      scheme_id TEXT NOT NULL,
-      link_id TEXT NOT NULL,
-      handed_code TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      expires_at INTEGER NOT NULL,
-      consumed_at INTEGER,
-      consumed_by_link_id TEXT,
-      ip_hash TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS handouts (
-      id TEXT PRIMARY KEY,
-      scheme_id TEXT NOT NULL,
-      link_id TEXT NOT NULL,
-      token_id TEXT,
-      created_at INTEGER NOT NULL,
-      ip_hash TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS rate_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      action TEXT NOT NULL,
-      ip_hash TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS rate_events_lookup
-      ON rate_events(action, ip_hash, created_at);
-
-    CREATE TABLE IF NOT EXISTS queue_settings (
-      scheme_id TEXT PRIMARY KEY,
-      owner_every INTEGER NOT NULL
-    );
-  `);
-  ensureQueueShape(db);
-  return db;
+/** D1's local exec treats a newline as the end of a statement, so each command is one line. */
+function sqlStatements(sql: string): string[] {
+  return sql
+    .split(";")
+    .map((statement) => statement.replace(/\s+/g, " ").trim())
+    .filter((statement) => statement.length > 0);
 }
 
-/** Safe to run on every request. Adds the owner-link columns to a database created before them. */
-export function ensureQueueShape(db: DatabaseSync) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS queue_settings (
-      scheme_id TEXT PRIMARY KEY,
-      owner_every INTEGER NOT NULL
-    );
-  `);
-  const columns = db.prepare("PRAGMA table_info(links)").all() as { name: string }[];
-  if (!columns.some((column) => column.name === "is_owner")) {
-    db.exec("ALTER TABLE links ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0");
+async function execSql(db: AppDatabase, sql: string) {
+  for (const statement of sqlStatements(sql)) {
+    await db.exec(`${statement};`);
   }
-  db.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS links_one_owner
-      ON links(scheme_id) WHERE is_owner = 1;
-  `);
 }
 
-function pruneRates(db: DatabaseSync, now: number) {
-  db.prepare("DELETE FROM rate_events WHERE created_at < ?").run(now - RATE_RETENTION_MS);
+/** Safe to run on every request. Adds the owner-link column to a database created before it. */
+export async function ensureQueueShape(db: AppDatabase) {
+  await execSql(db, SCHEMA_SQL);
+  const info = await db.prepare("PRAGMA table_info(links)").all<{ name: string }>();
+  if (!info.results.some((column) => column.name === "is_owner")) {
+    await db.exec("ALTER TABLE links ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0");
+  }
+  await execSql(db, OWNER_INDEX_SQL);
 }
 
-function recentStamps(db: DatabaseSync, action: string, ipHash: string, since: number): number[] {
-  const rows = db
+async function pruneRates(db: AppDatabase, now: number) {
+  await db.prepare("DELETE FROM rate_events WHERE created_at < ?").bind(now - RATE_RETENTION_MS).run();
+}
+
+async function recentStamps(db: AppDatabase, action: string, ipHash: string, since: number): Promise<number[]> {
+  const rows = await db
     .prepare(
       "SELECT created_at FROM rate_events WHERE action = ? AND ip_hash = ? AND created_at > ? ORDER BY created_at",
     )
-    .all(action, ipHash, since) as { created_at: number }[];
-  return rows.map((row) => row.created_at);
+    .bind(action, ipHash, since)
+    .all<{ created_at: number }>();
+  return rows.results.map((row) => row.created_at);
 }
 
-function noteRate(db: DatabaseSync, action: string, ipHash: string, now: number) {
-  db.prepare("INSERT INTO rate_events (action, ip_hash, created_at) VALUES (?, ?, ?)").run(action, ipHash, now);
+async function noteRate(db: AppDatabase, action: string, ipHash: string, now: number) {
+  await db
+    .prepare("INSERT INTO rate_events (action, ip_hash, created_at) VALUES (?, ?, ?)")
+    .bind(action, ipHash, now)
+    .run();
 }
 
-export function isRateLimited(
-  db: DatabaseSync,
+export async function isRateLimited(
+  db: AppDatabase,
   action: string,
   ipHash: string,
   now: number,
   rules: readonly LimitRule[],
-): boolean {
+): Promise<boolean> {
   const longest = Math.max(...rules.map((rule) => rule.windowMs));
-  return exceedsLimit(recentStamps(db, action, ipHash, now - longest), now, rules);
+  return exceedsLimit(await recentStamps(db, action, ipHash, now - longest), now, rules);
 }
 
-export function noteRateEvent(db: DatabaseSync, action: string, ipHash: string, now = Date.now()) {
-  noteRate(db, action, ipHash, now);
+export async function noteRateEvent(db: AppDatabase, action: string, ipHash: string, now = Date.now()) {
+  await noteRate(db, action, ipHash, now);
 }
 
-export function listLinks(db: DatabaseSync, schemeId: string): LinkRow[] {
-  const rows = db
+export async function listLinks(db: AppDatabase, schemeId: string): Promise<LinkRow[]> {
+  const rows = await db
     .prepare("SELECT * FROM links WHERE scheme_id = ? ORDER BY created_at ASC, id ASC")
-    .all(schemeId) as LinkSql[];
-  return rows.map(mapLink);
+    .bind(schemeId)
+    .all<LinkSql>();
+  return rows.results.map(mapLink);
 }
 
-function activeTaken(db: DatabaseSync, schemeId: string, column: "email" | "code", value: string): boolean {
-  const row = db
+async function activeTaken(db: AppDatabase, schemeId: string, column: "email" | "code", value: string): Promise<boolean> {
+  const row = await db
     .prepare(`SELECT id FROM links WHERE scheme_id = ? AND ${column} = ? AND active = 1`)
-    .get(schemeId, value) as { id: string } | undefined;
+    .bind(schemeId, value)
+    .first<{ id: string }>();
   return Boolean(row);
 }
 
-export function submitLink(
-  db: DatabaseSync,
+export async function submitLink(
+  db: AppDatabase,
   input: {
     schemeId: string;
     email: string;
@@ -280,12 +215,12 @@ export function submitLink(
     ipHash: string;
     now?: number;
   },
-): SubmitResult {
+): Promise<SubmitResult> {
   const now = input.now ?? Date.now();
   const email = input.email.trim().toLowerCase();
-  return withTransaction(db, () => {
-    pruneRates(db, now);
-    if (isRateLimited(db, "submit", input.ipHash, now, SUBMIT_RULES)) {
+  return withTransaction(db, async () => {
+    await pruneRates(db, now);
+    if (await isRateLimited(db, "submit", input.ipHash, now, SUBMIT_RULES)) {
       return { ok: false, reason: "rate" };
     }
 
@@ -293,9 +228,7 @@ export function submitLink(
     let tokenId: string | null = null;
 
     if (input.claimCode) {
-      const token = db.prepare("SELECT * FROM claim_tokens WHERE code = ?").get(input.claimCode) as
-        | TokenSql
-        | undefined;
+      const token = await db.prepare("SELECT * FROM claim_tokens WHERE code = ?").bind(input.claimCode).first<TokenSql>();
       const decision = evaluateClaim({
         rawCode: input.claimCode,
         token: token
@@ -313,13 +246,13 @@ export function submitLink(
       });
 
       if (decision.outcome === "reject") {
-        noteRate(db, "submit", input.ipHash, now);
+        await noteRate(db, "submit", input.ipHash, now);
         return { ok: false, reason: `claim-${decision.reason}` };
       }
 
       if (decision.outcome === "accept") {
-        if (isRateLimited(db, "boost", input.ipHash, now, BOOST_RULES)) {
-          noteRate(db, "submit", input.ipHash, now);
+        if (await isRateLimited(db, "boost", input.ipHash, now, BOOST_RULES)) {
+          await noteRate(db, "submit", input.ipHash, now);
           return { ok: false, reason: "boost-cap" };
         }
         boosted = true;
@@ -327,51 +260,55 @@ export function submitLink(
       }
     }
 
-    if (activeTaken(db, input.schemeId, "email", email)) {
-      noteRate(db, "submit", input.ipHash, now);
+    if (await activeTaken(db, input.schemeId, "email", email)) {
+      await noteRate(db, "submit", input.ipHash, now);
       return { ok: false, reason: "email-taken" };
     }
-    if (activeTaken(db, input.schemeId, "code", input.code)) {
-      noteRate(db, "submit", input.ipHash, now);
+    if (await activeTaken(db, input.schemeId, "code", input.code)) {
+      await noteRate(db, "submit", input.ipHash, now);
       return { ok: false, reason: "code-taken" };
     }
 
     const id = crypto.randomUUID();
-    db.prepare(
-      `INSERT INTO links (
+    await db
+      .prepare(
+        `INSERT INTO links (
         id, scheme_id, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
-    ).run(
-      id,
-      input.schemeId,
-      email,
-      input.code,
-      input.url,
-      boosted ? BOOSTED_WEIGHT : STANDARD_WEIGHT,
-      boosted ? 1 : 0,
-      now,
-      now,
-    );
+      )
+      .bind(
+        id,
+        input.schemeId,
+        email,
+        input.code,
+        input.url,
+        boosted ? BOOSTED_WEIGHT : STANDARD_WEIGHT,
+        boosted ? 1 : 0,
+        now,
+        now,
+      )
+      .run();
 
     if (boosted && tokenId) {
-      const consumed = db
+      const consumed = await db
         .prepare(
           "UPDATE claim_tokens SET consumed_at = ?, consumed_by_link_id = ? WHERE id = ? AND consumed_at IS NULL",
         )
-        .run(now, id, tokenId);
-      if (consumed.changes !== 1) {
+        .bind(now, id, tokenId)
+        .run();
+      if (consumed.meta.changes !== 1) {
         throw new Error("Claim token could not be consumed");
       }
-      noteRate(db, "boost", input.ipHash, now);
+      await noteRate(db, "boost", input.ipHash, now);
     }
 
-    noteRate(db, "submit", input.ipHash, now);
+    await noteRate(db, "submit", input.ipHash, now);
     return { ok: true, boosted, id };
   });
 }
 
-export function adminInsertLink(
-  db: DatabaseSync,
+export async function adminInsertLink(
+  db: AppDatabase,
   input: {
     schemeId: string;
     email: string;
@@ -380,53 +317,54 @@ export function adminInsertLink(
     boosted: boolean;
     now?: number;
   },
-): SubmitResult {
+): Promise<SubmitResult> {
   const now = input.now ?? Date.now();
   const email = input.email.trim().toLowerCase();
-  return withTransaction(db, () => {
-    if (activeTaken(db, input.schemeId, "email", email)) {
+  return withTransaction(db, async () => {
+    if (await activeTaken(db, input.schemeId, "email", email)) {
       return { ok: false, reason: "email-taken" };
     }
-    if (activeTaken(db, input.schemeId, "code", input.code)) {
+    if (await activeTaken(db, input.schemeId, "code", input.code)) {
       return { ok: false, reason: "code-taken" };
     }
     const id = crypto.randomUUID();
     const weight = input.boosted ? BOOSTED_WEIGHT : STANDARD_WEIGHT;
-    db.prepare(
-      `INSERT INTO links (
+    await db
+      .prepare(
+        `INSERT INTO links (
         id, scheme_id, email, code, url, weight, current_weight, handouts, boosted, active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?, ?)`,
-    ).run(id, input.schemeId, email, input.code, input.url, weight, input.boosted ? 1 : 0, now, now);
+      )
+      .bind(id, input.schemeId, email, input.code, input.url, weight, input.boosted ? 1 : 0, now, now)
+      .run();
     return { ok: true, boosted: input.boosted, id };
   });
 }
 
-export function handOutLink(
-  db: DatabaseSync,
+export async function handOutLink(
+  db: AppDatabase,
   input: { schemeId: string; ipHash: string; now?: number; newClaimCode?: () => string },
-): HandoutResult {
+): Promise<HandoutResult> {
   const now = input.now ?? Date.now();
   const newClaimCode = input.newClaimCode ?? generateClaimCode;
 
-  return withTransaction(db, () => {
-    pruneRates(db, now);
-    if (isRateLimited(db, "handout", input.ipHash, now, HANDOUT_RULES)) {
+  return withTransaction(db, async () => {
+    await pruneRates(db, now);
+    if (await isRateLimited(db, "handout", input.ipHash, now, HANDOUT_RULES)) {
       return { ok: false, reason: "rate" };
     }
 
-    const links = listLinks(db, input.schemeId).filter((link) => link.active);
-    const settings = getQueueSettings(db, input.schemeId);
+    const links = (await listLinks(db, input.schemeId)).filter((link) => link.active);
+    const settings = await getQueueSettings(db, input.schemeId);
     const picked = handOutNext(links.map(toMember), {
-      handoutsSoFar: countHandouts(db, input.schemeId),
+      handoutsSoFar: await countHandouts(db, input.schemeId),
       ownerEvery: settings.ownerEvery,
     });
     if (!picked) return { ok: false, reason: "empty" };
 
-    const update = db.prepare(
-      "UPDATE links SET current_weight = ?, handouts = ?, updated_at = ? WHERE id = ?",
-    );
+    const update = db.prepare("UPDATE links SET current_weight = ?, handouts = ?, updated_at = ? WHERE id = ?");
     for (const member of picked.members) {
-      update.run(member.currentWeight, member.handouts, now, member.id);
+      await update.bind(member.currentWeight, member.handouts, now, member.id).run();
     }
 
     const link = links.find((item) => item.id === picked.pickedId);
@@ -434,26 +372,23 @@ export function handOutLink(
 
     const claimCode = newClaimCode();
     const tokenId = crypto.randomUUID();
-    db.prepare(
-      `INSERT INTO claim_tokens (
+    await db
+      .prepare(
+        `INSERT INTO claim_tokens (
         id, code, scheme_id, link_id, handed_code, created_at, expires_at, ip_hash
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      tokenId,
-      claimCode,
-      input.schemeId,
-      link.id,
-      link.code,
-      now,
-      now + CLAIM_TTL_MS,
-      input.ipHash,
-    );
+      )
+      .bind(tokenId, claimCode, input.schemeId, link.id, link.code, now, now + CLAIM_TTL_MS, input.ipHash)
+      .run();
 
-    db.prepare(
-      "INSERT INTO handouts (id, scheme_id, link_id, token_id, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run(crypto.randomUUID(), input.schemeId, link.id, tokenId, now, input.ipHash);
+    await db
+      .prepare(
+        "INSERT INTO handouts (id, scheme_id, link_id, token_id, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .bind(crypto.randomUUID(), input.schemeId, link.id, tokenId, now, input.ipHash)
+      .run();
 
-    noteRate(db, "handout", input.ipHash, now);
+    await noteRate(db, "handout", input.ipHash, now);
 
     return {
       ok: true,
@@ -466,81 +401,97 @@ export function handOutLink(
   });
 }
 
-export function setLinkActive(db: DatabaseSync, id: string, active: boolean, now = Date.now()): ActiveResult {
-  return withTransaction(db, () => {
-    const row = db.prepare("SELECT * FROM links WHERE id = ?").get(id) as LinkSql | undefined;
+export async function setLinkActive(
+  db: AppDatabase,
+  id: string,
+  active: boolean,
+  now = Date.now(),
+): Promise<ActiveResult> {
+  return withTransaction(db, async () => {
+    const row = await db.prepare("SELECT * FROM links WHERE id = ?").bind(id).first<LinkSql>();
     if (!row) return { ok: false, reason: "missing" };
     if (active) {
-      if (activeTaken(db, row.scheme_id, "email", row.email)) return { ok: false, reason: "email-taken" };
-      if (activeTaken(db, row.scheme_id, "code", row.code)) return { ok: false, reason: "code-taken" };
+      if (await activeTaken(db, row.scheme_id, "email", row.email)) return { ok: false, reason: "email-taken" };
+      if (await activeTaken(db, row.scheme_id, "code", row.code)) return { ok: false, reason: "code-taken" };
     }
-    db.prepare("UPDATE links SET active = ?, updated_at = ? WHERE id = ?").run(active ? 1 : 0, now, id);
+    await db.prepare("UPDATE links SET active = ?, updated_at = ? WHERE id = ?").bind(active ? 1 : 0, now, id).run();
     return { ok: true };
   });
 }
 
 export type QueueSettings = { ownerEvery: number | null };
 
-export function countHandouts(db: DatabaseSync, schemeId: string): number {
-  const row = db.prepare("SELECT COUNT(*) AS n FROM handouts WHERE scheme_id = ?").get(schemeId) as { n: number };
-  return Number(row.n);
+export async function countHandouts(db: AppDatabase, schemeId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM handouts WHERE scheme_id = ?")
+    .bind(schemeId)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
 }
 
-export function getQueueSettings(db: DatabaseSync, schemeId: string): QueueSettings {
-  const row = db.prepare("SELECT owner_every FROM queue_settings WHERE scheme_id = ?").get(schemeId) as
-    | { owner_every: number }
-    | undefined;
+export async function getQueueSettings(db: AppDatabase, schemeId: string): Promise<QueueSettings> {
+  const row = await db
+    .prepare("SELECT owner_every FROM queue_settings WHERE scheme_id = ?")
+    .bind(schemeId)
+    .first<{ owner_every: number }>();
   if (!row) return { ownerEvery: 3 };
   const parsed = parseOwnerEvery(row.owner_every);
   return { ownerEvery: parsed.ok ? parsed.ownerEvery : 3 };
 }
 
-export function setOwnerEvery(
-  db: DatabaseSync,
+export async function setOwnerEvery(
+  db: AppDatabase,
   schemeId: string,
   value: number,
-): { ok: true; ownerEvery: number | null } | { ok: false; reason: "invalid" } {
+): Promise<{ ok: true; ownerEvery: number | null } | { ok: false; reason: "invalid" }> {
   const parsed = parseOwnerEvery(value);
   if (!parsed.ok) return { ok: false, reason: "invalid" };
-  db.prepare(
-    `INSERT INTO queue_settings (scheme_id, owner_every) VALUES (?, ?)
+  await db
+    .prepare(
+      `INSERT INTO queue_settings (scheme_id, owner_every) VALUES (?, ?)
      ON CONFLICT(scheme_id) DO UPDATE SET owner_every = excluded.owner_every`,
-  ).run(schemeId, parsed.ownerEvery ?? 0);
+    )
+    .bind(schemeId, parsed.ownerEvery ?? 0)
+    .run();
   return { ok: true, ownerEvery: parsed.ownerEvery };
 }
 
 /** One owner link per scheme. Pass null to clear it. An inactive link may stay marked. */
-export function setOwnerLink(
-  db: DatabaseSync,
+export async function setOwnerLink(
+  db: AppDatabase,
   schemeId: string,
   linkId: string | null,
   now = Date.now(),
-): { ok: true } | { ok: false; reason: "missing" } {
-  return withTransaction(db, () => {
+): Promise<{ ok: true } | { ok: false; reason: "missing" }> {
+  return withTransaction(db, async () => {
     if (linkId) {
-      const row = db.prepare("SELECT id FROM links WHERE id = ? AND scheme_id = ?").get(linkId, schemeId) as
-        | { id: string }
-        | undefined;
+      const row = await db
+        .prepare("SELECT id FROM links WHERE id = ? AND scheme_id = ?")
+        .bind(linkId, schemeId)
+        .first<{ id: string }>();
       if (!row) return { ok: false, reason: "missing" };
     }
-    db.prepare("UPDATE links SET is_owner = 0, updated_at = ? WHERE scheme_id = ? AND is_owner = 1").run(now, schemeId);
+    await db
+      .prepare("UPDATE links SET is_owner = 0, updated_at = ? WHERE scheme_id = ? AND is_owner = 1")
+      .bind(now, schemeId)
+      .run();
     if (linkId) {
-      db.prepare("UPDATE links SET is_owner = 1, updated_at = ? WHERE id = ?").run(now, linkId);
+      await db.prepare("UPDATE links SET is_owner = 1, updated_at = ? WHERE id = ?").bind(now, linkId).run();
     }
     return { ok: true };
   });
 }
 
-export function reorderLink(
-  db: DatabaseSync,
+export async function reorderLink(
+  db: AppDatabase,
   schemeId: string,
   id: string,
   direction: "up" | "down",
   now = Date.now(),
 ) {
-  withTransaction(db, () => {
-    const links = listLinks(db, schemeId);
-    const settings = getQueueSettings(db, schemeId);
+  await withTransaction(db, async () => {
+    const links = await listLinks(db, schemeId);
+    const settings = await getQueueSettings(db, schemeId);
     const ownerReserved = settings.ownerEvery !== null && links.some((link) => link.owner && link.active);
     const members = links.map(toMember).map((member) =>
       ownerReserved && member.owner ? { ...member, active: false } : member,
@@ -549,7 +500,7 @@ export function reorderLink(
     const write = db.prepare("UPDATE links SET current_weight = ?, updated_at = ? WHERE id = ?");
     for (const member of updated) {
       if (!member.active) continue;
-      write.run(member.currentWeight, now, member.id);
+      await write.bind(member.currentWeight, now, member.id).run();
     }
   });
 }
@@ -563,24 +514,23 @@ export type TicketView = {
   demo: boolean;
 };
 
-export function lookupTicket(db: DatabaseSync, claimCode: string, now = Date.now()): TicketView | null {
-  const row = db
+export async function lookupTicket(db: AppDatabase, claimCode: string, now = Date.now()): Promise<TicketView | null> {
+  const row = await db
     .prepare(
       `SELECT t.code, t.expires_at, t.consumed_at, l.url, l.code AS referral_code, l.email
        FROM claim_tokens t
        JOIN links l ON l.id = t.link_id
        WHERE t.code = ?`,
     )
-    .get(claimCode) as
-    | {
-        code: string;
-        expires_at: number;
-        consumed_at: number | null;
-        url: string;
-        referral_code: string;
-        email: string;
-      }
-    | undefined;
+    .bind(claimCode)
+    .first<{
+      code: string;
+      expires_at: number;
+      consumed_at: number | null;
+      url: string;
+      referral_code: string;
+      email: string;
+    }>();
 
   if (!row) return null;
   return {
@@ -601,19 +551,22 @@ const DEMO_LINKS: { email: string; code: string; boosted: boolean }[] = [
 ];
 
 /** Sample queue for local screenshots. Not real EDF customers. */
-export function seedDemoIfEmpty(db: DatabaseSync) {
-  const count = db.prepare("SELECT COUNT(*) AS n FROM links").get() as { n: number };
-  if (count.n > 0) return;
+export async function seedDemoIfEmpty(db: AppDatabase) {
+  const count = await db.prepare("SELECT COUNT(*) AS n FROM links").first<{ n: number }>();
+  if (Number(count?.n ?? 0) > 0) return;
   const base = Date.parse("2026-11-16T09:00:00Z");
-  const inserted = DEMO_LINKS.map((link, index) =>
-    adminInsertLink(db, {
-      schemeId: edfScheme.id,
-      email: link.email,
-      code: link.code,
-      url: `https://www.edfenergy.com/quote/refer-a-friend/${link.code}`,
-      boosted: link.boosted,
-      now: base + index * 1000,
-    }),
-  );
-  if (inserted[0]?.ok) setOwnerLink(db, edfScheme.id, inserted[0].id, base);
+  const inserted = [];
+  for (const [index, link] of DEMO_LINKS.entries()) {
+    inserted.push(
+      await adminInsertLink(db, {
+        schemeId: edfScheme.id,
+        email: link.email,
+        code: link.code,
+        url: `https://www.edfenergy.com/quote/refer-a-friend/${link.code}`,
+        boosted: link.boosted,
+        now: base + index * 1000,
+      }),
+    );
+  }
+  if (inserted[0]?.ok) await setOwnerLink(db, edfScheme.id, inserted[0].id, base);
 }

@@ -64,9 +64,9 @@ export default async function AdminPage({
 
   const params = await searchParams;
   const notice = params.notice ? notices[params.notice] : undefined;
-  const db = getDb();
-  const links = listLinks(db, edfScheme.id);
-  const settings = getQueueSettings(db, edfScheme.id);
+  const db = await getDb();
+  const links = await listLinks(db, edfScheme.id);
+  const settings = await getQueueSettings(db, edfScheme.id);
   const ownerShareOn = settings.ownerEvery !== null;
   const active = links.filter((link) => link.active);
   const removed = links.filter((link) => !link.active);

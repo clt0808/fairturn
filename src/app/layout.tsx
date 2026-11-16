@@ -30,10 +30,9 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const demo = listLinks(getDb(), edfScheme.id).some((link) => link.active && isDemoEmail(link.email));
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const demo = (await listLinks(await getDb(), edfScheme.id)).some((link) => link.active && isDemoEmail(link.email));
 
   return (
     <html lang="en-GB" className={`${sans.variable} ${serif.variable} h-full antialiased`}>

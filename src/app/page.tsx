@@ -36,13 +36,13 @@ function turnLabel(member: QueueMember | undefined, ownerShareOn: boolean): { te
   return { text: "Standard link", className: "text-sm text-ink" };
 }
 
-export default function HomePage() {
-  const db = getDb();
-  const links = listLinks(db, edfScheme.id).filter((link) => link.active);
-  const settings = getQueueSettings(db, edfScheme.id);
+export default async function HomePage() {
+  const db = await getDb();
+  const links = (await listLinks(db, edfScheme.id)).filter((link) => link.active);
+  const settings = await getQueueSettings(db, edfScheme.id);
   const ownerShareOn = settings.ownerEvery !== null && links.some((link) => link.owner);
   const members = links.map(toMember);
-  const handoutsSoFar = countHandouts(db, edfScheme.id);
+  const handoutsSoFar = await countHandouts(db, edfScheme.id);
   const upcoming = previewHandouts(members, 4, {
     handoutsSoFar,
     ownerEvery: ownerShareOn ? settings.ownerEvery : null,

@@ -1,19 +1,25 @@
 import "server-only";
-import fs from "fs";
-import path from "path";
-import { createAppDatabase, ensureQueueShape, seedDemoIfEmpty } from "./repository";
-import type { DatabaseSync } from "node:sqlite";
+import { env } from "cloudflare:workers";
+import { ensureQueueShape, seedDemoIfEmpty, type AppDatabase } from "./repository";
 
-const globalForDb = globalThis as unknown as { fairturnDb?: DatabaseSync };
+type WorkerEnv = {
+  DB?: AppDatabase;
+  SEED_DEMO?: string;
+};
 
-export function getDb(): DatabaseSync {
-  if (!globalForDb.fairturnDb) {
-    const file = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "fairturn.db");
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const db = createAppDatabase(file);
-    if (process.env.SEED_DEMO === "true") seedDemoIfEmpty(db);
-    globalForDb.fairturnDb = db;
+let demoSeeded = false;
+
+export async function getDb(): Promise<AppDatabase> {
+  const workerEnv = env as WorkerEnv;
+  const database = workerEnv.DB;
+  if (!database) {
+    throw new Error("D1 binding DB is not configured");
   }
-  ensureQueueShape(globalForDb.fairturnDb);
-  return globalForDb.fairturnDb;
+  await ensureQueueShape(database);
+  const seed = workerEnv.SEED_DEMO ?? process.env.SEED_DEMO;
+  if (!demoSeeded && seed === "true") {
+    await seedDemoIfEmpty(database);
+    demoSeeded = true;
+  }
+  return database;
 }

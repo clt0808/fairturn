@@ -7,10 +7,10 @@ import { edfScheme, offerSentence } from "@/lib/schemes/edf";
 export const metadata: Metadata = { title: "FAQ" };
 export const dynamic = "force-dynamic";
 
-function questions(): { q: string; a: string }[] {
-  const db = getDb();
-  const settings = getQueueSettings(db, edfScheme.id);
-  const hasOwner = listLinks(db, edfScheme.id).some((link) => link.owner && link.active);
+async function questions(): Promise<{ q: string; a: string }[]> {
+  const db = await getDb();
+  const settings = await getQueueSettings(db, edfScheme.id);
+  const hasOwner = (await listLinks(db, edfScheme.id)).some((link) => link.owner && link.active);
   return [
   {
     q: "Is FairTurn part of EDF?",
@@ -55,8 +55,8 @@ function questions(): { q: string; a: string }[] {
 ];
 }
 
-export default function FaqPage() {
-  const items = questions();
+export default async function FaqPage() {
+  const items = await questions();
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <h1 className="font-serif text-4xl">Questions</h1>

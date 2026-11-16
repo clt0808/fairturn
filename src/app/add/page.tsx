@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AddPage() {
   const jar = await cookies();
   const normalized = normalizeClaimCode(jar.get(CLAIM_COOKIE)?.value ?? "");
-  const ticket = normalized.length === 8 ? lookupTicket(getDb(), normalized) : null;
+  const ticket = normalized.length === 8 ? await lookupTicket(await getDb(), normalized) : null;
   const usable = Boolean(ticket && !ticket.consumed && !ticket.expired);
 
   let savedCodeNote: string | null = null;

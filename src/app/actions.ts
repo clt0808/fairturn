@@ -83,7 +83,7 @@ async function requireAdmin() {
 export async function handOutLinkAction(): Promise<HandoutState> {
   try {
     const ipHash = await visitorHash();
-    const result = handOutLink(getDb(), { schemeId: edfScheme.id, ipHash });
+    const result = await handOutLink(await getDb(), { schemeId: edfScheme.id, ipHash });
     if (!result.ok) {
       if (result.reason === "empty") {
         return { status: "error", message: "The queue is empty. Add a link if you already have one from EDF." };
@@ -135,7 +135,8 @@ export async function submitLinkAction(_prev: SubmitState, formData: FormData): 
 
   try {
     const ipHash = await visitorHash();
-    const result = submitLink(getDb(), {
+    const db = await getDb();
+    const result = await submitLink(db, {
       schemeId: edfScheme.id,
       email: emailResult.email,
       code: parsed.code,
@@ -148,7 +149,7 @@ export async function submitLinkAction(_prev: SubmitState, formData: FormData): 
       return { status: "error", message: submitErrors[result.reason] ?? "That link could not be added." };
     }
 
-    const queueSize = listLinks(getDb(), edfScheme.id).filter((link) => link.active).length;
+    const queueSize = (await listLinks(db, edfScheme.id)).filter((link) => link.active).length;
     return { status: "ok", boosted: result.boosted, email: emailResult.email, queueSize };
   } catch (error) {
     console.error("submit failed", error instanceof Error ? error.message : "unknown");
@@ -163,15 +164,15 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   if (!expected) return { error: "Admin is not configured. Set ADMIN_PASSWORD and restart." };
 
   const ipHash = await visitorHash();
-  const db = getDb();
+  const db = await getDb();
   const now = Date.now();
-  if (isRateLimited(db, "admin-login", ipHash, now, ADMIN_LOGIN_RULES)) {
+  if (await isRateLimited(db, "admin-login", ipHash, now, ADMIN_LOGIN_RULES)) {
     return { error: "Too many attempts. Please wait an hour and try again." };
   }
 
   const password = String(formData.get("password") ?? "");
   if (!passwordsMatch(password, expected)) {
-    noteRateEvent(db, "admin-login", ipHash, now);
+    await noteRateEvent(db, "admin-login", ipHash, now);
     return { error: "That password is not right." };
   }
 
@@ -197,7 +198,7 @@ export async function seedLinkAction(_prev: SeedState, formData: FormData): Prom
   const parsed = edfScheme.parseReferralUrl(String(formData.get("url") ?? ""));
   if (!parsed.ok) return { error: parsed.error };
 
-  const result = adminInsertLink(getDb(), {
+  const result = await adminInsertLink(await getDb(), {
     schemeId: edfScheme.id,
     email: emailResult.email,
     code: parsed.code,
@@ -224,7 +225,7 @@ export async function setOwnerEveryAction(
   if (!/^\d+$/.test(raw)) {
     return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
   }
-  const result = setOwnerEvery(getDb(), edfScheme.id, Number(raw));
+  const result = await setOwnerEvery(await getDb(), edfScheme.id, Number(raw));
   if (!result.ok) {
     return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
   }
@@ -234,7 +235,7 @@ export async function setOwnerEveryAction(
 export async function setOwnerLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "").trim();
-  const result = setOwnerLink(getDb(), edfScheme.id, id || null);
+  const result = await setOwnerLink(await getDb(), edfScheme.id, id || null);
   if (!result.ok) redirect("/admin?notice=missing");
 }
 
@@ -242,13 +243,13 @@ export async function moveLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const direction = formData.get("direction") === "down" ? "down" : "up";
-  reorderLink(getDb(), edfScheme.id, id, direction);
+  await reorderLink(await getDb(), edfScheme.id, id, direction);
 }
 
 export async function removeLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  const result = setLinkActive(getDb(), id, false);
+  const result = await setLinkActive(await getDb(), id, false);
   if (!result.ok) redirect("/admin?notice=missing");
   redirect("/admin");
 }
@@ -256,7 +257,7 @@ export async function removeLinkAction(formData: FormData) {
 export async function restoreLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  const result = setLinkActive(getDb(), id, true);
+  const result = await setLinkActive(await getDb(), id, true);
   if (!result.ok) redirect(`/admin?notice=${result.reason}`);
   redirect("/admin");
 }

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Render health check. Confirms the process can open the SQLite queue. */
-export function GET() {
+/** Confirms the Worker can read the D1 queue. */
+export async function GET() {
   try {
-    const row = getDb().prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
-    if (!row || row.ok !== 1) {
+    const row = await (await getDb()).prepare("SELECT 1 AS ok").first<{ ok: number }>();
+    if (!row || Number(row.ok) !== 1) {
       return NextResponse.json({ ok: false }, { status: 503 });
     }
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (error) {
+    console.error("health check failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ ok: false }, { status: 503 });
   }
 }

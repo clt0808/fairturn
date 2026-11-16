@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 export default async function GetPage() {
   const jar = await cookies();
   const normalized = normalizeClaimCode(jar.get(CLAIM_COOKIE)?.value ?? "");
-  const found = normalized ? lookupTicket(getDb(), normalized) : null;
-  const active = listLinks(getDb(), edfScheme.id).filter((link) => link.active).length;
+  const db = await getDb();
+  const found = normalized ? await lookupTicket(db, normalized) : null;
+  const active = (await listLinks(db, edfScheme.id)).filter((link) => link.active).length;
 
   const initialTicket = found
     ? {

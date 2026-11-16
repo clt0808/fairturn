@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fairturn",
+  "account_id": "29f4fc65d2704a07cf507412c60a66c7",
+  "compatibility_date": "2026-11-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "vinext/server/fetch-handler",
+  "vars": {
+    "SEED_DEMO": "false"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fairturn",
+      "database_id": "13836587-98f4-4f6b-aa79-a97d75208d59",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "dist/client",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/*",
+      "!/_next/static/*",
+      "!/*/_next/static/*"
+    ]
+  }
+}
