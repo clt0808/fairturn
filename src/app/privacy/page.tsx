@@ -8,8 +8,8 @@ export default function PrivacyPage() {
       <h1 className="font-serif text-4xl">Privacy note</h1>
       <div className="mt-6 max-w-prose space-y-4 leading-7 text-ink/80">
         <p>
-          FairTurn is a small queue. It is built to collect as little as possible, and it is not EDF. EDF’s own privacy
-          policy applies once you continue onto edfenergy.com.
+          FairTurn is a small queue. It is not the provider. The provider’s own privacy policy applies once you continue
+          onto their site or app.
         </p>
         <h2 className="font-serif text-2xl text-ink">If you take a link</h2>
         <p>

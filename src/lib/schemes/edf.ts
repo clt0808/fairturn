@@ -77,6 +77,7 @@ export const edfScheme: ReferralScheme = {
   id: "edf",
   supplierName: "EDF",
   schemeName: "Refer a Friend",
+  entry: "url",
   referrerReward: "£100",
   newCustomerReward: "£75",
   offerStart: "2026-11-16",
@@ -85,6 +86,8 @@ export const edfScheme: ReferralScheme = {
   offerEndLabel: "5 January 2027",
   offerUrl: "https://www.edfenergy.com/refer-a-friend",
   termsUrl: "https://www.edfenergy.com/sites/default/files/2024-09/H3267%20Refer-A-Friend%20AW1_1.pdf",
+  termsLine: "EDF referral links are for friends and family. EDF may withhold the reward.",
+  cardLine: "£100 for the referrer and £75 for the new customer, until 5 January 2027.",
   exampleUrl: "https://www.edfenergy.com/quote/refer-a-friend/glassy-oak-677",
   parseReferralUrl: parseEdfReferralUrl,
 };

@@ -134,10 +134,9 @@ describe("owner share setting", () => {
     expect(parseOwnerEvery(51)).toEqual({ ok: false });
   });
 
-  it("describes an active every-third share, and says when it is off", () => {
-    expect(ownerShareCopy(3, true)).toContain("every third turn");
-    expect(ownerShareCopy(3, true)).toContain("because they run the site");
-    expect(ownerShareCopy(3, false)).toContain("off at the moment");
-    expect(ownerShareCopy(null, true)).toContain("off at the moment");
+  it("uses one neutral line when the owner share is on", () => {
+    expect(ownerShareCopy(3, true)).toBe("The site owner's own link is included in the rotation.");
+    expect(ownerShareCopy(3, false)).toBe("");
+    expect(ownerShareCopy(null, true)).toBe("");
   });
 });

@@ -27,7 +27,7 @@ import {
 } from "@/lib/db/repository";
 import { parseEmail } from "@/lib/format";
 import { clientAddress, hashAddress } from "@/lib/http";
-import { edfScheme } from "@/lib/schemes/edf";
+import { getScheme, type ReferralScheme } from "@/lib/schemes";
 
 export type PublicTicket = {
   url: string;
@@ -36,6 +36,10 @@ export type PublicTicket = {
   demo: boolean;
   consumed: boolean;
   expired: boolean;
+  entry: ReferralScheme["entry"];
+  supplierName: string;
+  signupUrl?: string;
+  signupHint?: string;
 };
 
 export type HandoutState =
@@ -57,8 +61,22 @@ const submitErrors: Record<string, string> = {
   "claim-used": "That claim code has already been used. Clear the field to join at the standard priority.",
   "claim-self": "That claim code was issued for this same referral link, so it cannot boost it. Clear the field to join at the standard priority.",
   "claim-already": "A link cannot be boosted twice.",
+  "claim-provider": "That claim code is for a different provider. Clear it to join this queue at the standard priority.",
   "boost-cap": "A boosted place is not available from this network today. The limit is two. Clear the claim code to join at the standard priority, or try again tomorrow.",
 };
+
+function schemeFrom(formData: FormData): ReferralScheme | null {
+  return getScheme(String(formData.get("provider") ?? "")) ?? null;
+}
+
+function adminRedirect(formData: FormData, notice?: string): never {
+  const provider = String(formData.get("provider") ?? "");
+  const params = new URLSearchParams();
+  if (getScheme(provider)) params.set("provider", provider);
+  if (notice) params.set("notice", notice);
+  const query = params.toString();
+  redirect(query ? `/admin?${query}` : "/admin");
+}
 
 async function visitorHash(): Promise<string> {
   const headerStore = await headers();
@@ -80,13 +98,15 @@ async function requireAdmin() {
   if (!readAdminSession(jar.get(ADMIN_COOKIE)?.value)) redirect("/admin");
 }
 
-export async function handOutLinkAction(): Promise<HandoutState> {
+export async function handOutLinkAction(_prev: HandoutState, formData: FormData): Promise<HandoutState> {
+  const scheme = schemeFrom(formData);
+  if (!scheme) return { status: "error", message: "That provider is not in the queue." };
   try {
     const ipHash = await visitorHash();
-    const result = await handOutLink(await getDb(), { schemeId: edfScheme.id, ipHash });
+    const result = await handOutLink(await getDb(), { schemeId: scheme.id, ipHash });
     if (!result.ok) {
       if (result.reason === "empty") {
-        return { status: "error", message: "The queue is empty. Add a link if you already have one from EDF." };
+        return { status: "error", message: "This queue is empty. Add yours if you already have one." };
       }
       return {
         status: "error",
@@ -106,6 +126,10 @@ export async function handOutLinkAction(): Promise<HandoutState> {
         demo: result.demo,
         consumed: false,
         expired: false,
+        entry: scheme.entry,
+        supplierName: scheme.supplierName,
+        signupUrl: scheme.signupUrl,
+        signupHint: scheme.signupHint,
       },
     };
   } catch (error) {
@@ -118,7 +142,9 @@ export async function submitLinkAction(_prev: SubmitState, formData: FormData): 
   const emailResult = parseEmail(String(formData.get("email") ?? ""));
   if (!emailResult.ok) return { status: "error", message: emailResult.error };
 
-  const parsed = edfScheme.parseReferralUrl(String(formData.get("url") ?? ""));
+  const scheme = schemeFrom(formData);
+  if (!scheme) return { status: "error", message: "That provider is not in the queue." };
+  const parsed = scheme.parseReferralUrl(String(formData.get(scheme.entry === "code" ? "code" : "url") ?? ""));
   if (!parsed.ok) return { status: "error", message: parsed.error };
 
   const rawClaim = String(formData.get("claim") ?? "");
@@ -137,7 +163,7 @@ export async function submitLinkAction(_prev: SubmitState, formData: FormData): 
     const ipHash = await visitorHash();
     const db = await getDb();
     const result = await submitLink(db, {
-      schemeId: edfScheme.id,
+      schemeId: scheme.id,
       email: emailResult.email,
       code: parsed.code,
       url: parsed.canonicalUrl,
@@ -149,7 +175,7 @@ export async function submitLinkAction(_prev: SubmitState, formData: FormData): 
       return { status: "error", message: submitErrors[result.reason] ?? "That link could not be added." };
     }
 
-    const queueSize = (await listLinks(db, edfScheme.id)).filter((link) => link.active).length;
+    const queueSize = (await listLinks(db, scheme.id)).filter((link) => link.active).length;
     return { status: "ok", boosted: result.boosted, email: emailResult.email, queueSize };
   } catch (error) {
     console.error("submit failed", error instanceof Error ? error.message : "unknown");
@@ -195,11 +221,13 @@ export async function seedLinkAction(_prev: SeedState, formData: FormData): Prom
 
   const emailResult = parseEmail(String(formData.get("email") ?? ""));
   if (!emailResult.ok) return { error: emailResult.error };
-  const parsed = edfScheme.parseReferralUrl(String(formData.get("url") ?? ""));
+  const scheme = schemeFrom(formData);
+  if (!scheme) return { error: "Choose a provider." };
+  const parsed = scheme.parseReferralUrl(String(formData.get(scheme.entry === "code" ? "code" : "url") ?? ""));
   if (!parsed.ok) return { error: parsed.error };
 
   const result = await adminInsertLink(await getDb(), {
-    schemeId: edfScheme.id,
+    schemeId: scheme.id,
     email: emailResult.email,
     code: parsed.code,
     url: parsed.canonicalUrl,
@@ -225,7 +253,9 @@ export async function setOwnerEveryAction(
   if (!/^\d+$/.test(raw)) {
     return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
   }
-  const result = await setOwnerEvery(await getDb(), edfScheme.id, Number(raw));
+  const scheme = schemeFrom(formData);
+  if (!scheme) return { error: "Choose a provider." };
+  const result = await setOwnerEvery(await getDb(), scheme.id, Number(raw));
   if (!result.ok) {
     return { error: "Enter 0 to turn the owner share off, or a whole number from 2 to 50." };
   }
@@ -235,29 +265,31 @@ export async function setOwnerEveryAction(
 export async function setOwnerLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "").trim();
-  const result = await setOwnerLink(await getDb(), edfScheme.id, id || null);
-  if (!result.ok) redirect("/admin?notice=missing");
+  const result = await setOwnerLink(await getDb(), schemeFrom(formData)?.id ?? "", id || null);
+  if (!result.ok) adminRedirect(formData, "missing");
 }
 
 export async function moveLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const direction = formData.get("direction") === "down" ? "down" : "up";
-  await reorderLink(await getDb(), edfScheme.id, id, direction);
+  const scheme = schemeFrom(formData);
+  if (!scheme) adminRedirect(formData);
+  await reorderLink(await getDb(), scheme.id, id, direction);
 }
 
 export async function removeLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const result = await setLinkActive(await getDb(), id, false);
-  if (!result.ok) redirect("/admin?notice=missing");
-  redirect("/admin");
+  if (!result.ok) adminRedirect(formData, "missing");
+  adminRedirect(formData);
 }
 
 export async function restoreLinkAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const result = await setLinkActive(await getDb(), id, true);
-  if (!result.ok) redirect(`/admin?notice=${result.reason}`);
-  redirect("/admin");
+  if (!result.ok) adminRedirect(formData, result.reason);
+  adminRedirect(formData);
 }

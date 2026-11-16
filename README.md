@@ -93,7 +93,7 @@ For a local demo, set `SEED_DEMO=true` in `.dev.vars` before the first start. Th
 
 ## Deploy it on Cloudflare Workers
 
-The Worker name is `fairturn`. D1 database `fairturn` is bound as `DB`. `wrangler.jsonc` holds the account, the compatibility date, `nodejs_compat`, and `SEED_DEMO=false`. Apply `migrations/0001_init.sql` to that database before the first request.
+The Worker name is `fairturn`. D1 database `fairturn` is bound as `DB`. `wrangler.jsonc` holds the account, the compatibility date, `nodejs_compat`, and `SEED_DEMO=false`. Apply `migrations/0001_init.sql` on a new database. On a database that already has `0001`, run `migrations/0002_providers.sql` once. It adds a `provider` column, default `edf`, to the queue tables.
 
 `ADMIN_PASSWORD`, `AUTH_SECRET`, and `IP_HASH_SALT` are Worker secrets. They are not in git. Set them on the Worker before anyone uses `/admin`. Visitor addresses are read from `CF-Connecting-IP`. `GET /health` checks that D1 answers `SELECT 1`.
 

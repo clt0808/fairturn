@@ -6,7 +6,7 @@ import { TermsNotice } from "@/components/terms-notice";
 import { getDb } from "@/lib/db";
 import { listLinks } from "@/lib/db/repository";
 import { isDemoEmail } from "@/lib/format";
-import { edfScheme } from "@/lib/schemes/edf";
+import { listSchemes } from "@/lib/schemes";
 import "./globals.css";
 
 const sans = Source_Sans_3({
@@ -23,16 +23,23 @@ const serif = Newsreader({
 
 export const metadata: Metadata = {
   title: {
-    default: "FairTurn — a fair queue for EDF referral links",
+    default: "FairTurn — a fair queue for referral links",
     template: "%s · FairTurn",
   },
-  description: `EDF Refer a Friend links, handed out in rotation. Until ${edfScheme.offerEndLabel} the published reward is ${edfScheme.referrerReward} for the referrer and ${edfScheme.newCustomerReward} for the new customer.`,
+  description: "Each provider has its own rotation, so one link cannot take every turn.",
 };
 
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const demo = (await listLinks(await getDb(), edfScheme.id)).some((link) => link.active && isDemoEmail(link.email));
+  const db = await getDb();
+  let demo = false;
+  for (const scheme of listSchemes()) {
+    if ((await listLinks(db, scheme.id)).some((link) => link.active && isDemoEmail(link.email))) {
+      demo = true;
+      break;
+    }
+  }
 
   return (
     <html lang="en-GB" className={`${sans.variable} ${serif.variable} h-full antialiased`}>
@@ -47,7 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <TermsNotice />
         {demo ? (
           <p className="border-b border-line bg-moss px-4 py-2 text-center text-sm text-pine-deep">
-            Sample queue for this prototype. Links stored against example.com are not real EDF customers.
+            Sample queue. Addresses at example.com are not real customers.
           </p>
         ) : null}
         <div id="content" className="flex-1">

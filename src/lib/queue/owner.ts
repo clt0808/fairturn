@@ -69,10 +69,8 @@ export function ordinalWord(interval: number): string {
  */
 export function ownerShareCopy(ownerEvery: number | null, hasActiveOwner: boolean): string {
   const every = normalizeOwnerEvery(ownerEvery);
-  if (!hasActiveOwner || every === null) {
-    return "The person who runs this site can mark one link as theirs, so it appears on a fixed turn, every third turn by default, because they run the site. That share is off at the moment, so every turn is the fair rotation.";
-  }
-  return `The site owner’s link appears every ${ordinalWord(every)} turn, because they run the site. Every other turn is the fair rotation. Those owner turns do not change how often everyone else’s links are offered relative to each other.`;
+  if (!hasActiveOwner || every === null) return "";
+  return "The site owner's own link is included in the rotation.";
 }
 
 function activeOwner(members: readonly QueueMember[]): QueueMember | undefined {

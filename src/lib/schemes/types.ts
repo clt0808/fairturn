@@ -13,15 +13,24 @@ export type ReferralScheme = {
   id: string;
   supplierName: string;
   schemeName: string;
+  /** url: paste a referral link. code: paste a referral code. */
+  entry: "url" | "code";
   referrerReward: string;
   newCustomerReward: string;
-  /** Inclusive calendar dates, YYYY-MM-DD, in Europe/London. */
+  /** Inclusive calendar dates, YYYY-MM-DD, in Europe/London. Empty when the provider does not publish a window. */
   offerStart: string;
   offerEnd: string;
   offerStartLabel: string;
   offerEndLabel: string;
   offerUrl: string;
   termsUrl: string;
+  /** One line for the terms notice, before the terms link. */
+  termsLine: string;
+  /** One line on the provider card. */
+  cardLine: string;
   exampleUrl: string;
+  /** Where a code is typed, for code-based schemes. */
+  signupUrl?: string;
+  signupHint?: string;
   parseReferralUrl(input: string): ParseResult;
 };
