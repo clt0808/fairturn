@@ -1,0 +1,2 @@
+import{n as e,r as t}from"./root-params-C-2nvY5W.js";import"./isolate-shared-promise-D8f3TOAk.js";async function n(n){let r=e(n.params,n.rootParamNamesByPattern[n.pattern]);return t(r,()=>n.fn(n.rejectEmptyResults?{params:n.params,rejectEmptyResults:!0}:{params:n.params}))}export{n as t};
+//# sourceMappingURL=app-prerender-static-params-CvCAK2uh.js.map

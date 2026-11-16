@@ -1,0 +1,2 @@
+import"./rolldown-runtime-XKyaHtl9.js";import{t as e}from"./react-CQmtu_zT.js";import{n as t}from"./button-CUTVt29T.js";import{t as n}from"./jsx-runtime-LKYXHABd.js";e();var r=n();function i({className:e,...n}){return(0,r.jsx)(`div`,{className:t(`rounded-lg border border-line bg-card text-ink shadow-sm`,e),...n})}export{i as t};
+//# sourceMappingURL=card-2EA8neoZ.js.map

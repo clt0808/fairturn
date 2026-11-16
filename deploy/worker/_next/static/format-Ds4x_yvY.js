@@ -1,0 +1,2 @@
+function e(e){return new Intl.DateTimeFormat(`en-GB`,{day:`numeric`,month:`short`,year:`numeric`,hour:`2-digit`,minute:`2-digit`,timeZone:`Europe/London`}).format(new Date(e))}function t(e){let t=e.trim().toLowerCase();return t?t.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)?{ok:!1,error:`That email address does not look right.`}:{ok:!0,email:t}:{ok:!1,error:`Enter the email address you want this link stored against.`}}function n(e){return e.toLowerCase().endsWith(`@example.com`)}export{n,t as r,e as t};
+//# sourceMappingURL=format-Ds4x_yvY.js.map

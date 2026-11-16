@@ -1,0 +1,2 @@
+import{d as e,y as t}from"./headers-CKlGtecN.js";import{a as n}from"./cache-control-BASWa4Qh.js";import{t as r}from"./app-rsc-cache-busting-v2EZwgNF.js";import{t as i}from"./websocket-upgrade-response-Br6dDtPT.js";function a(e){return e===`STATIC`?`HIT`:e}function o(n,r){n.set(t,r),n.set(e,a(r))}function s(e){if(i(e))return e;let t=e;try{c(e.headers)}catch{t=new Response(e.body,e),c(t.headers)}return n(t)}function c(e){e.set(t,`BYPASS`),e.delete(`CF-Cache-Status`),e.delete(r)}export{s as n,o as t};
+//# sourceMappingURL=cache-headers-BjKr2Vx_.js.map

@@ -1,0 +1,2 @@
+import"./rolldown-runtime-XKyaHtl9.js";import"../../index.js";import"./navigation-context-state-B806QbwH.js";import{t as e}from"./react-CQmtu_zT.js";e();function t(){return null}function n(e,t){}export{t as n,n as t};
+//# sourceMappingURL=navigation-BPX-xA4o.js.map
