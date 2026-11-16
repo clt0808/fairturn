@@ -1,1 +1,0 @@
-import"./CcyWYbDU.js";import{i as e,r as t}from"./B0PXqnjO.js";import{n}from"./BKuSA5k9.js";e();var r=t();function i({className:e,...t}){return(0,r.jsx)(`div`,{className:n(`rounded-lg border border-line bg-card text-ink shadow-sm`,e),...t})}export{i as t};

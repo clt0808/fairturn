@@ -1,5 +1,5 @@
 {
-  "main_module": "index.js",
+  "main_module": "asset-worker.js",
   "compatibility_date": "2026-11-16",
   "compatibility_flags": [
     "nodejs_compat"
@@ -17,34 +17,8 @@
     }
   ],
   "keep_bindings": [
-    {
-      "type": "secret_text",
-      "name": "ADMIN_PASSWORD"
-    },
-    {
-      "type": "secret_text",
-      "name": "AUTH_SECRET"
-    },
-    {
-      "type": "secret_text",
-      "name": "IP_HASH_SALT"
-    }
+    "secret_text"
   ],
-  "assets": {
-    "used": true,
-    "directory": "assets",
-    "file_count": 33,
-    "uncompressed_bytes": 843179,
-    "config": {
-      "html_handling": "none",
-      "not_found_handling": "none",
-      "run_worker_first": [
-        "/*",
-        "!/_next/static/*",
-        "!/*/_next/static/*"
-      ]
-    }
-  },
   "modules": [
     {
       "name": "__vinext_action_owner_manifest.js",
@@ -82,8 +56,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-action-forwarding-DdWuArUf.js",
-      "path": "worker/_next/static/app-action-forwarding-DdWuArUf.js",
+      "name": "_next/static/app-action-forwarding-C9pd2cTc.js",
+      "path": "worker/_next/static/app-action-forwarding-C9pd2cTc.js",
       "type": "application/javascript+module"
     },
     {
@@ -97,18 +71,18 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-page-cache-Dp89ry9_.js",
-      "path": "worker/_next/static/app-page-cache-Dp89ry9_.js",
+      "name": "_next/static/app-page-cache-BnI3qiR1.js",
+      "path": "worker/_next/static/app-page-cache-BnI3qiR1.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-page-cache-finalizer-DzNzc4A8.js",
-      "path": "worker/_next/static/app-page-cache-finalizer-DzNzc4A8.js",
+      "name": "_next/static/app-page-cache-finalizer-UyF8p9vf.js",
+      "path": "worker/_next/static/app-page-cache-finalizer-UyF8p9vf.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-page-cache-render-Bjq0TYF1.js",
-      "path": "worker/_next/static/app-page-cache-render-Bjq0TYF1.js",
+      "name": "_next/static/app-page-cache-render-dRR_E86n.js",
+      "path": "worker/_next/static/app-page-cache-render-dRR_E86n.js",
       "type": "application/javascript+module"
     },
     {
@@ -132,8 +106,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-page-tracing-D-pcR7By.js",
-      "path": "worker/_next/static/app-page-tracing-D-pcR7By.js",
+      "name": "_next/static/app-page-tracing-kzBvB42d.js",
+      "path": "worker/_next/static/app-page-tracing-kzBvB42d.js",
       "type": "application/javascript+module"
     },
     {
@@ -152,28 +126,28 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-route-handler-dispatch-CnZNReMP.js",
-      "path": "worker/_next/static/app-route-handler-dispatch-CnZNReMP.js",
+      "name": "_next/static/app-route-handler-dispatch-GBH10ftC.js",
+      "path": "worker/_next/static/app-route-handler-dispatch-GBH10ftC.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-route-handler-execution-C_LD08Fo.js",
-      "path": "worker/_next/static/app-route-handler-execution-C_LD08Fo.js",
+      "name": "_next/static/app-route-handler-execution-BiGjzCn0.js",
+      "path": "worker/_next/static/app-route-handler-execution-BiGjzCn0.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-rsc-cache-busting-v2EZwgNF.js",
-      "path": "worker/_next/static/app-rsc-cache-busting-v2EZwgNF.js",
+      "name": "_next/static/app-rsc-cache-busting-D9b1DWgm.js",
+      "path": "worker/_next/static/app-rsc-cache-busting-D9b1DWgm.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-rsc-errors-zEucTOvJ.js",
-      "path": "worker/_next/static/app-rsc-errors-zEucTOvJ.js",
+      "name": "_next/static/app-rsc-errors-mQrQG0Z5.js",
+      "path": "worker/_next/static/app-rsc-errors-mQrQG0Z5.js",
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-rsc-response-stage-DEm5by4U.js",
-      "path": "worker/_next/static/app-rsc-response-stage-DEm5by4U.js",
+      "name": "_next/static/app-rsc-response-stage-Cw4RANOb.js",
+      "path": "worker/_next/static/app-rsc-response-stage-Cw4RANOb.js",
       "type": "application/javascript+module"
     },
     {
@@ -182,8 +156,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-server-action-execution-X3ciJxFx.js",
-      "path": "worker/_next/static/app-server-action-execution-X3ciJxFx.js",
+      "name": "_next/static/app-server-action-execution-BEX-hesi.js",
+      "path": "worker/_next/static/app-server-action-execution-BEX-hesi.js",
       "type": "application/javascript+module"
     },
     {
@@ -192,8 +166,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/app-worker-stages-BCL-STCW.js",
-      "path": "worker/_next/static/app-worker-stages-BCL-STCW.js",
+      "name": "_next/static/app-worker-stages-BkaHMcuJ.js",
+      "path": "worker/_next/static/app-worker-stages-BkaHMcuJ.js",
       "type": "application/javascript+module"
     },
     {
@@ -222,8 +196,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/cache-headers-BjKr2Vx_.js",
-      "path": "worker/_next/static/cache-headers-BjKr2Vx_.js",
+      "name": "_next/static/cache-headers-N5AimCUZ.js",
+      "path": "worker/_next/static/cache-headers-N5AimCUZ.js",
       "type": "application/javascript+module"
     },
     {
@@ -247,8 +221,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/client-build-files-0ciViC2l.js",
-      "path": "worker/_next/static/client-build-files-0ciViC2l.js",
+      "name": "_next/static/client-build-files-BFHIi1Kn.js",
+      "path": "worker/_next/static/client-build-files-BFHIi1Kn.js",
       "type": "application/javascript+module"
     },
     {
@@ -352,8 +326,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/isr-cache-BZve2L8b.js",
-      "path": "worker/_next/static/isr-cache-BZve2L8b.js",
+      "name": "_next/static/isr-cache-Bp1fl5Yd.js",
+      "path": "worker/_next/static/isr-cache-Bp1fl5Yd.js",
       "type": "application/javascript+module"
     },
     {
@@ -372,8 +346,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/metadata-route-response-ChXAdV_w.js",
-      "path": "worker/_next/static/metadata-route-response-ChXAdV_w.js",
+      "name": "_next/static/metadata-route-response-CXe5OH4N.js",
+      "path": "worker/_next/static/metadata-route-response-CXe5OH4N.js",
       "type": "application/javascript+module"
     },
     {
@@ -402,8 +376,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/navigation-signal-B2ub-jXc.js",
-      "path": "worker/_next/static/navigation-signal-B2ub-jXc.js",
+      "name": "_next/static/navigation-signal-BItVrgJT.js",
+      "path": "worker/_next/static/navigation-signal-BItVrgJT.js",
       "type": "application/javascript+module"
     },
     {
@@ -487,8 +461,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/revalidation-request-CRFSnvmQ.js",
-      "path": "worker/_next/static/revalidation-request-CRFSnvmQ.js",
+      "name": "_next/static/revalidation-request-tVOg1qUc.js",
+      "path": "worker/_next/static/revalidation-request-tVOg1qUc.js",
       "type": "application/javascript+module"
     },
     {
@@ -532,8 +506,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/server-action-not-found-CWEPuwM4.js",
-      "path": "worker/_next/static/server-action-not-found-CWEPuwM4.js",
+      "name": "_next/static/server-action-not-found-udP9sj5T.js",
+      "path": "worker/_next/static/server-action-not-found-udP9sj5T.js",
       "type": "application/javascript+module"
     },
     {
@@ -542,8 +516,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/text-stream-BgyiJhev.js",
-      "path": "worker/_next/static/text-stream-BgyiJhev.js",
+      "name": "_next/static/text-stream-CPVc8c-Q.js",
+      "path": "worker/_next/static/text-stream-CPVc8c-Q.js",
       "type": "application/javascript+module"
     },
     {
@@ -577,8 +551,8 @@
       "type": "application/javascript+module"
     },
     {
-      "name": "_next/static/worker-image-optimization-Bo8XPCP2.js",
-      "path": "worker/_next/static/worker-image-optimization-Bo8XPCP2.js",
+      "name": "_next/static/worker-image-optimization-w2VWSxCy.js",
+      "path": "worker/_next/static/worker-image-optimization-w2VWSxCy.js",
       "type": "application/javascript+module"
     },
     {
@@ -587,8 +561,18 @@
       "type": "application/javascript+module"
     },
     {
+      "name": "asset-worker.js",
+      "path": "worker/asset-worker.js",
+      "type": "application/javascript+module"
+    },
+    {
       "name": "index.js",
       "path": "worker/index.js",
+      "type": "application/javascript+module"
+    },
+    {
+      "name": "serve-static.js",
+      "path": "worker/serve-static.js",
       "type": "application/javascript+module"
     },
     {
@@ -762,11 +746,17 @@
       "type": "application/javascript+module"
     },
     {
+      "name": "static-registry.js",
+      "path": "worker/static-registry.js",
+      "type": "application/javascript+module"
+    },
+    {
       "name": "vinext-client-assets.js",
       "path": "worker/vinext-client-assets.js",
       "type": "application/javascript+module"
     }
   ],
-  "worker_modules_uncompressed_bytes": 1277167,
-  "worker_module_count": 144
+  "worker_module_count": 147,
+  "worker_modules_uncompressed_bytes": 2220095,
+  "worker_modules_gzip_bytes": 822989
 }
