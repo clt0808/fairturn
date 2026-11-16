@@ -103,7 +103,7 @@ npx wrangler d1 migrations apply fairturn --local
 npm start
 ```
 
-`npm run build` is the vinext production build. `npm start` serves that build with Wrangler and the local D1 database.
+`npm run build` is the vinext production build. Styles, scripts, and fonts are copied into the Worker as modules and served from there, including the long-lived cache header for `/_next/static/*`. `npm start` serves that build with Wrangler and the local D1 database.
 
 D1 does not offer interactive `BEGIN`/`COMMIT`. A single request still runs the queue statements in the same order as before. Two requests at the same moment are not wrapped in one SQLite transaction; the claim-token update still accepts only one winner (`consumed_at IS NULL`).
 

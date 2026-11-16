@@ -15,16 +15,5 @@
       "database_id": "13836587-98f4-4f6b-aa79-a97d75208d59",
       "migrations_dir": "migrations"
     }
-  ],
-  "assets": {
-    "directory": "dist/client",
-    "html_handling": "none",
-    "not_found_handling": "none",
-    "binding": "ASSETS",
-    "run_worker_first": [
-      "/*",
-      "!/_next/static/*",
-      "!/*/_next/static/*"
-    ]
-  }
+  ]
 }
